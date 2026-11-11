@@ -371,6 +371,6 @@ The same command is used by GitHub Actions. A passing test suite checks the impl
 - Futures simulation approximates liquidation, funding event ordering and fills; it is not a replica of Binance's matching or margin engine.
 - The risk policy is a separate precheck and is not yet integrated into a live execution engine.
 - No private Binance account connection, order placement, position management or live trading is enabled.
-- Next research improvements should include stronger walk-forward evaluation, regime-by-regime attribution, benchmark comparisons, bootstrap/Monte Carlo robustness and report visualizations before any execution work.
+- Next research improvements should include deeper regime-level equity attribution, benchmark comparisons, bootstrap/Monte Carlo robustness, sensitivity analysis and report visualizations before any execution work.
 
 **Development principle:** establish reproducible evidence, cost-aware positive expectancy and controlled drawdown before considering paper trading or real-money execution.
