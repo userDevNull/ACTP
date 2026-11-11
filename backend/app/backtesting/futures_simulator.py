@@ -134,7 +134,9 @@ def run_futures_backtest(
 
         # Signals from candle i close are filled no earlier than candle i+1 open.
         if i < len(frame) - 1:
-            # The callback receives a read-only chronological view. Avoid copying\n            # every prefix; the Phase 7 precomputed callbacks use index lookups.\n            signal = strategy(frame.iloc[:i + 1], i)
+            # The callback receives a read-only chronological view. Avoid copying
+            # every prefix; the Phase 7 precomputed callbacks use index lookups.
+            signal = strategy(frame.iloc[:i + 1], i)
             if signal not in (-1, 0, 1):
                 raise ValueError("Strategy must return -1, 0, or 1")
             if position is not None and signal == -position["direction"]:
