@@ -55,9 +55,11 @@ def test_dashboard_contains_offline_charts_and_scorecard():
 def test_dashboard_escapes_user_supplied_labels():
     report = sample_report()
     report["datasets"][0]["symbol"] = "<script>alert(1)</script>"
+    report["datasets"][0]["candles"] = "<img src=x onerror=alert(1)>"
     html = build_research_dashboard(report)
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html
 
 
 def test_dashboard_writer_creates_parent_and_file(tmp_path):
