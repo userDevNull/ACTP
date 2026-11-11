@@ -88,7 +88,7 @@ One-factor-at-a-time sensitivity analysis is run on the validation segment only.
 Additional output files:
 - `strategy_lab_benchmarks.csv` — baseline metrics by symbol, timeframe, segment and cost scenario
 - `strategy_lab_sensitivity.csv` — validation-only results by strategy, tested parameter and multiplier
-- Both datasets are also included in `strategy_lab_report.json` under `benchmarks` and `sensitivity`
+- Both datasets are also included in `strategy_lab_report.json` under `benchmarks` and `sensitivity`. The main strategy results also include `excess_return_vs_spot_pct` and `excess_return_vs_cash_pct` for direct, segment-matched comparisons.
 
 No new dependencies are required; the analysis uses the existing simulator, pandas and NumPy.
 
