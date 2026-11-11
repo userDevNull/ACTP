@@ -58,6 +58,9 @@ def test_lab_runs_all_strategies_across_three_splits_and_cost_scenarios():
         "train_end": 120, "validation_end": 160, "total": 200
     }
     assert len(report["results"]) == 5 * 3 * 2
+    assert len(report["monte_carlo"]) == 5 * 3 * 2
+    assert all(row["simulations"] == 1000 for row in report["monte_carlo"])
+    assert all(row["method"] == "trade_pnl_bootstrap_with_replacement" for row in report["monte_carlo"])
     assert {row["segment"] for row in report["results"]} == {
         "train", "validation", "test"
     }
