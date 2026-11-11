@@ -82,17 +82,25 @@ def audit_market_dataset(
 
     funding_rows = 0
     if funding is not None and not funding.empty:
-        missing_funding = sorted({"timestamp", "funding_rate"} - set(funding.columns))
+        funding_timestamp_column = (
+            "funding_time" if "funding_time" in funding.columns
+            else "timestamp" if "timestamp" in funding.columns else None
+        )
+        missing_funding = []
+        if funding_timestamp_column is None:
+            missing_funding.append("funding_time (or timestamp)")
+        if "funding_rate" not in funding.columns:
+            missing_funding.append("funding_rate")
         if missing_funding:
             errors.append(f"Missing funding columns: {', '.join(missing_funding)}")
         else:
             funding_rows = len(funding)
-            funding_ts = pd.to_datetime(funding["timestamp"], utc=True, errors="coerce")
+            funding_ts = pd.to_datetime(funding[funding_timestamp_column], utc=True, errors="coerce")
             rates = pd.to_numeric(funding["funding_rate"], errors="coerce")
             if funding_ts.isna().any() or not np.isfinite(rates.to_numpy(dtype=float)).all():
                 errors.append("Funding contains invalid timestamps or non-finite rates")
             if funding_ts.dropna().duplicated().any():
-                errors.append("Funding contains duplicate timestamps")
+                errors.append("Funding contains duplicate event timestamps")
 
     start = valid_ts.min().isoformat() if not valid_ts.empty else None
     end = valid_ts.max().isoformat() if not valid_ts.empty else None
