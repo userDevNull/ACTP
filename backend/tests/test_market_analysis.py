@@ -66,3 +66,33 @@ def test_transition_analysis_rejects_empty_and_unknown_regimes():
         regime_transition_analysis(pd.DataFrame())
     with pytest.raises(ValueError, match="Unknown market regimes"):
         regime_transition_analysis(pd.DataFrame({"market_regime": ["BULLISH"]}))
+
+
+from app.intelligence.multi_timeframe import multi_timeframe_consensus
+
+
+def test_multi_timeframe_consensus_uses_only_closed_higher_timeframe_candles():
+    fast = pd.DataFrame({
+        "timestamp": pd.date_range("2024-01-01", periods=8, freq="1h", tz="UTC"),
+        "market_regime": ["TREND_UP"] * 8,
+    })
+    slow = pd.DataFrame({
+        "timestamp": pd.to_datetime(["2024-01-01T00:00:00Z", "2024-01-01T04:00:00Z"]),
+        "market_regime": ["RANGE", "TREND_UP"],
+    })
+    result = multi_timeframe_consensus({"1h": fast, "4h": slow})
+    # The 00:00 4h candle is not complete at 01:00; the 04:00 4h candle
+    # only becomes available at 08:00.
+    assert result.loc[0, "regime_4h"] == "RANGE"
+    assert result.loc[2, "regime_4h"] == "RANGE"
+    assert result.loc[3, "regime_4h"] == "RANGE"
+    assert result.loc[4, "regime_4h"] == "RANGE"
+    assert result.loc[7, "regime_4h"] == "TREND_UP"
+    assert result.loc[7, "consensus_regime"] == "TREND_UP"
+
+
+def test_multi_timeframe_consensus_requires_multiple_supported_frames():
+    with pytest.raises(ValueError, match="At least two"):
+        multi_timeframe_consensus({"1h": pd.DataFrame()})
+    with pytest.raises(ValueError, match="Unsupported timeframe"):
+        multi_timeframe_consensus({"1h": pd.DataFrame(), "17m": pd.DataFrame()})
