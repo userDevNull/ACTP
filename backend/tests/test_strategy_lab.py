@@ -2,10 +2,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from app.backtesting.futures_simulator import FuturesConfig
+
 from app.backtesting.strategy_lab import (
     BARS_PER_YEAR,
     _regime_attribution,
     _regime_labels,
+    _spot_buy_and_hold_segment,
     performance_metrics,
     run_strategy_lab,
     strategy_catalog,
@@ -29,6 +32,23 @@ def test_strategy_catalog_contains_fixed_comparison_set():
     assert set(strategy_catalog()) == {
         "adaptive", "trend_crossover", "breakout", "momentum", "mean_reversion"
     }
+
+
+def test_spot_buy_and_hold_uses_next_open_and_has_no_futures_funding():
+    candles = sample_candles(10)
+    curve, trades = _spot_buy_and_hold_segment(
+        candles, 0, 10,
+        FuturesConfig(
+            initial_equity=500.0, leverage=1.0,
+            taker_fee_rate=0.001, slippage_rate=0.001,
+        ),
+    )
+    assert len(curve) == 10
+    assert len(trades) == 1
+    assert trades[0]["entry_time"] == candles.iloc[1]["timestamp"].isoformat()
+    assert trades[0]["funding_paid"] == 0.0
+    assert trades[0]["reason"] == "end_of_data"
+    assert curve[-1]["equity"] == trades[0]["net_pnl"] + 500.0
 
 
 def test_performance_metrics_calculates_core_statistics():
