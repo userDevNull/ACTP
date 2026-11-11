@@ -367,11 +367,11 @@ The same command is used by GitHub Actions. A passing test suite checks the impl
 ## 9. Current limitations and next work
 
 - The live dashboard still relies on external market-data services and has no complete offline market-data cache.
-- The strategy performance lab is a research CLI; it is not yet integrated as a dashboard page.
+- The strategy performance lab is a research CLI; it is not yet integrated as a dashboard page. Phase 12 adds candle/funding data-quality preflight and cross-symbol/timeframe out-of-sample consistency summaries; actual local CSVs must be supplied to produce market-specific findings.
 - Futures simulation approximates liquidation, funding event ordering and fills; it is not a replica of Binance's matching or margin engine.
 - The risk policy is a separate precheck and is not yet integrated into a live execution engine.
 - No private Binance account connection, order placement, position management or live trading is enabled.
-- Next research improvements should include benchmark comparisons, sensitivity analysis and report visualizations before any execution work. Phase 9 now adds a trade-level bootstrap diagnostic; it does not replace chronological out-of-sample validation.
+- Phase 12 adds dataset integrity audits and a cross-market validation summary across symbol/timeframe datasets. The next research priorities are real-data execution review, walk-forward evaluation, stronger dependence-aware uncertainty estimates, and simulator fidelity. Bootstrap summaries do not replace chronological out-of-sample validation.
 
 ## 11. Phase 9 — Trade-level bootstrap robustness
 
@@ -488,3 +488,15 @@ The output `multi_timeframe_consensus.csv` contains each timeframe's available r
 - backend/requirements.txt contains pandas, NumPy and pytest already needed by Phase 8; no new dependency was required.
 - .gitignore excludes backend/reports/ and backend/data/ so historical datasets and reports remain local.
 - Backend tests include Phase 8 causal no-lookahead checks.
+
+
+## 14. Phase 12 — Cross-symbol and multi-timeframe validation
+
+The strategy lab can now audit each input dataset before simulation and produce a cross-market summary from the frozen test segment. Recommended matrix: BTCUSDT, ETHUSDT, SOLUSDT and BNBUSDT across 15m, 1h and 4h, using comparable date ranges and matching Futures funding data.
+
+New outputs:
+- `dataset_quality_audit.csv`: candle/funding schema and integrity checks, timestamp duplicates, gaps, invalid OHLCV and zero-volume warnings.
+- `cross_market_validation.csv`: per-strategy test consistency, matched spot benchmark edge, median return/drawdown, within-dataset rank and trade count.
+- Both are included in `strategy_lab_report.json`.
+
+A failed data-quality audit blocks a run; warnings are retained for review. Cross-market statistics use medians and dataset-level counts rather than pooling returns. Three or more independent symbol/timeframe datasets are needed even for a preliminary consistency read; more diverse assets and multiple market cycles are preferable. Never optimize using the test segment and then present that same segment as untouched evidence.
