@@ -391,6 +391,42 @@ Reported fields include 5th/median/95th percentile final equity, confidence inte
 
 **Critical limitation:** this is a trade-level bootstrap approximation, not a market-path simulation or forecast. It resamples completed net PnL with replacement and ignores chronological/serial dependence, overlapping exposure, changing position sizes, regime shifts, and bar-level execution/stop/liquidation paths. It must be interpreted alongside the untouched chronological test segment, multiple symbols/timeframes and stressed transaction costs. No new Python package is required; existing NumPy and pandas are used.
 
+## 12. Phase 10 — Benchmark comparisons and sensitivity analysis
+
+Phase 10 extends the strategy laboratory with two reference baselines and validation-only one-factor sensitivity tests.
+
+### Benchmark baselines
+
+Every chronological segment (train, validation and test) and cost scenario is compared against:
+- `buy_and_hold_long`: enter long at the next available candle open after the segment begins and hold until the segment ends.
+- `cash_no_trade`: remain in cash with no positions or transaction costs.
+
+Both use the same initial virtual equity, simulator, configured execution costs and supplied funding data as the strategies. Buy-and-hold is a long-only reference, not a risk-matched benchmark. Compare return together with drawdown and trade count rather than ranking by return alone.
+
+### Sensitivity matrix
+
+One-factor-at-a-time sensitivity is run only on the validation segment, for each of the five strategies. It varies:
+- Risk fraction: 0.5x, 1x, 1.5x and 2x base
+- Leverage: 0.5x, 1x, 1.5x and 2x base (minimum 1x)
+- Taker fee: 0.5x, 1x, 1.5x and 2x base
+- Slippage: 0.5x, 1x, 1.5x and 2x base
+
+Risk, fee and slippage values are bounded by the simulator's validation limits. The sensitivity matrix does not optimize strategy parameters, change stop/target distances or alter funding assumptions. It is a stability diagnostic, not an optimizer. Use validation for selection and preserve the final test segment for a single, frozen evaluation.
+
+### New output files
+
+- `reports/phase10/strategy_lab_benchmarks.csv` — benchmark results by symbol, timeframe, segment and cost scenario.
+- `reports/phase10/strategy_lab_sensitivity.csv` — validation-only sensitivity results by strategy, parameter and multiplier.
+- `strategy_lab_report.json` includes both collections under `benchmarks` and `sensitivity`.
+
+Example run from `ACTP/backend`:
+
+~~~powershell
+python run_strategy_lab.py --dataset "BTCUSDT,1h,data/BTCUSDT_1h_futures_klines.csv,data/BTCUSDT_futures_funding.csv" --dataset "ETHUSDT,1h,data/ETHUSDT_1h_futures_klines.csv,data/ETHUSDT_futures_funding.csv" --monte-carlo-simulations 2000 --seed 42 --output-dir reports/phase10
+~~~
+
+No new Python dependency is required. Existing pandas, NumPy and the research-only futures simulator are used. No exchange orders or live API credentials are used.
+
 **Development principle:** establish reproducible evidence, cost-aware positive expectancy and controlled drawdown before considering paper trading or real-money execution.
 
 ---
