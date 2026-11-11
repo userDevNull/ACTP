@@ -398,10 +398,10 @@ Phase 10 extends the strategy laboratory with two reference baselines and valida
 ### Benchmark baselines
 
 Every chronological segment (train, validation and test) and cost scenario is compared against:
-- `buy_and_hold_long`: enter long at the next available candle open after the segment begins and hold until the segment ends.
+- `buy_and_hold_spot`: invest the available virtual equity in a fully funded spot position at the next candle open and hold until the segment ends, including entry/exit fee and slippage assumptions.
 - `cash_no_trade`: remain in cash with no positions or transaction costs.
 
-Both use the same initial virtual equity, simulator, configured execution costs and supplied funding data as the strategies. Buy-and-hold is a long-only reference, not a risk-matched benchmark. Compare return together with drawdown and trade count rather than ranking by return alone.
+The spot benchmark uses the same initial equity and fee/slippage assumptions but does not use leverage, futures funding or liquidation; it is a fully funded spot reference, not a risk-matched futures benchmark. The cash baseline is uninvested equity with no transaction costs. Stress scenarios vary spot entry/exit costs; funding does not apply to spot. Compare return together with drawdown rather than ranking by return alone.
 
 ### Sensitivity matrix
 
