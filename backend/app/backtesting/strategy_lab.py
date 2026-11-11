@@ -539,6 +539,10 @@ def run_strategy_lab(
     sensitivity_rows = _sensitivity_analysis(
         frame, funding, train_end, validation_end, strategies, base, timeframe
     )
+    benchmark_lookup = {
+        (row["segment"], row["cost_scenario"], row["benchmark"]): row
+        for row in benchmark_rows
+    }
     for segment_name, (start, end) in segments.items():
         for strategy_name, strategy in strategies.items():
             for scenario_name, (scenario_config, scenario_funding) in scenarios.items():
@@ -569,6 +573,16 @@ def run_strategy_lab(
                     "end_index_exclusive": end,
                     "bars": end - start,
                     **metrics,
+                    "excess_return_vs_spot_pct": round(
+                        metrics["net_return_pct"] - benchmark_lookup[
+                            (segment_name, scenario_name, "buy_and_hold_spot")
+                        ]["net_return_pct"], 4
+                    ),
+                    "excess_return_vs_cash_pct": round(
+                        metrics["net_return_pct"] - benchmark_lookup[
+                            (segment_name, scenario_name, "cash_no_trade")
+                        ]["net_return_pct"], 4
+                    ),
                 })
                 for attribution in _regime_attribution(result["trades"], frame, regime_labels):
                     regime_rows.append({
