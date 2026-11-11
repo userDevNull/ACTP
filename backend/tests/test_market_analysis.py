@@ -41,3 +41,27 @@ def test_invalid_timestamps_and_window_rejected():
         analyze_market(data.assign(timestamp=data["timestamp"].iloc[0]))
     with pytest.raises(ValueError, match="timestamp column"):
         analyze_market(data.drop(columns="timestamp"))
+
+
+from app.intelligence.regime_transitions import regime_transition_analysis
+
+
+def test_regime_transition_probabilities_and_episode_persistence():
+    frame = pd.DataFrame({"market_regime": [
+        "RANGE", "RANGE", "TREND_UP", "TREND_UP", "RANGE", "BREAKOUT_UP"
+    ]})
+    result = regime_transition_analysis(frame)
+    assert result["transitions_observed"] == 5
+    assert result["transition_counts"]["RANGE"]["TREND_UP"] == 1
+    assert result["transition_counts"]["RANGE"]["RANGE"] == 1
+    assert result["transition_probabilities"]["RANGE"]["TREND_UP"] == 0.5
+    assert result["persistence"]["RANGE"]["episodes"] == 2
+    assert result["persistence"]["RANGE"]["average_duration_candles"] == 1.5
+    assert result["persistence"]["TREND_UP"]["max_duration_candles"] == 2
+
+
+def test_transition_analysis_rejects_empty_and_unknown_regimes():
+    with pytest.raises(ValueError, match="cannot be empty"):
+        regime_transition_analysis(pd.DataFrame())
+    with pytest.raises(ValueError, match="Unknown market regimes"):
+        regime_transition_analysis(pd.DataFrame({"market_regime": ["BULLISH"]}))
