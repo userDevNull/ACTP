@@ -54,7 +54,8 @@ def test_regime_transition_probabilities_and_episode_persistence():
     assert result["transitions_observed"] == 5
     assert result["transition_counts"]["RANGE"]["TREND_UP"] == 1
     assert result["transition_counts"]["RANGE"]["RANGE"] == 1
-    assert result["transition_probabilities"]["RANGE"]["TREND_UP"] == 0.5
+    assert result["transition_probabilities"]["RANGE"]["TREND_UP"] == 0.33333333
+    assert sum(result["transition_probabilities"]["RANGE"].values()) == pytest.approx(1.0)
     assert result["persistence"]["RANGE"]["episodes"] == 2
     assert result["persistence"]["RANGE"]["average_duration_candles"] == 1.5
     assert result["persistence"]["TREND_UP"]["max_duration_candles"] == 2
