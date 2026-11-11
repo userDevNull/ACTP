@@ -62,7 +62,7 @@ def test_lab_runs_all_strategies_across_three_splits_and_cost_scenarios():
     assert len(report["benchmarks"]) == 2 * 3 * 2
     assert len(report["sensitivity"]) == 5 * 4 * 4
     assert {row["benchmark"] for row in report["benchmarks"]} == {
-        "buy_and_hold_long", "cash_no_trade"
+        "buy_and_hold_spot", "cash_no_trade"
     }
     assert {row["segment"] for row in report["benchmarks"]} == {
         "train", "validation", "test"
