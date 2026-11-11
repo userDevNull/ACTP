@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from app.intelligence.market_analysis import analyze_market, summarize_market
+from app.intelligence.regime_transitions import regime_transition_analysis
 
 
 def main() -> None:
@@ -21,13 +22,21 @@ def main() -> None:
     candles = pd.read_csv(args.candles)
     diagnostics = analyze_market(candles, volatility_window=args.volatility_window)
     summary = summarize_market(diagnostics)
+    transitions = regime_transition_analysis(diagnostics)
+    summary["regime_transitions"] = transitions
     args.output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = args.output_dir / "market_diagnostics.csv"
     json_path = args.output_dir / "market_summary.json"
+    matrix_path = args.output_dir / "regime_transition_matrix.csv"
+    persistence_path = args.output_dir / "regime_persistence.csv"
     diagnostics.to_csv(csv_path, index=False)
     json_path.write_text(json.dumps(summary, indent=2, allow_nan=False), encoding="utf-8")
+    pd.DataFrame.from_dict(transitions["transition_counts"], orient="index").rename_axis("from_regime").to_csv(matrix_path)
+    pd.DataFrame.from_dict(transitions["persistence"], orient="index").rename_axis("regime").to_csv(persistence_path)
     print(f"Diagnostics: {csv_path}")
     print(f"Summary: {json_path}")
+    print(f"Transition matrix: {matrix_path}")
+    print(f"Regime persistence: {persistence_path}")
     print(f"Latest regime: {summary['latest_regime']}")
 
 
