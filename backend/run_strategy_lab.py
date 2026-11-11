@@ -36,6 +36,10 @@ def main() -> None:
     parser.add_argument("--fee", type=float, default=0.0005)
     parser.add_argument("--slippage", type=float, default=0.0005)
     parser.add_argument("--maintenance-margin", type=float, default=0.005)
+    parser.add_argument("--monte-carlo-simulations", type=int, default=1000,
+                        help="Trade-bootstrap paths per experiment (default: 1000)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Deterministic Monte Carlo seed (default: 42)")
     parser.add_argument("--output-dir", type=Path, default=Path("reports/phase7"))
     args = parser.parse_args()
 
@@ -49,6 +53,7 @@ def main() -> None:
     )
     all_rows = []
     regime_rows = []
+    monte_carlo_rows = []
     dataset_summaries = []
 
     for symbol, timeframe, candles_path, funding_path in args.dataset:
@@ -61,11 +66,17 @@ def main() -> None:
                 parser.error(f"Funding file not found: {funding_path}")
             funding = pd.read_csv(funding_path)
 
-        report = run_strategy_lab(candles, funding, timeframe, config)
+        report = run_strategy_lab(
+            candles, funding, timeframe, config,
+            monte_carlo_simulations=args.monte_carlo_simulations,
+            monte_carlo_seed=args.seed,
+        )
         for row in report["results"]:
             all_rows.append({"symbol": symbol, **row})
         for row in report["regime_attribution"]:
             regime_rows.append({"symbol": symbol, **row})
+        for row in report["monte_carlo"]:
+            monte_carlo_rows.append({"symbol": symbol, **row})
         dataset_summaries.append({
             "symbol": symbol,
             "timeframe": timeframe,
@@ -83,6 +94,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = args.output_dir / "strategy_lab_results.csv"
     regime_csv_path = args.output_dir / "strategy_lab_regime_attribution.csv"
+    monte_carlo_csv_path = args.output_dir / "strategy_lab_monte_carlo.csv"
     json_path = args.output_dir / "strategy_lab_report.json"
 
     results = pd.DataFrame(all_rows)
@@ -93,6 +105,7 @@ def main() -> None:
         )
     results.to_csv(csv_path, index=False)
     pd.DataFrame(regime_rows).to_csv(regime_csv_path, index=False)
+    pd.DataFrame(monte_carlo_rows).to_csv(monte_carlo_csv_path, index=False)
 
     payload = {
         "warning": (
@@ -102,10 +115,16 @@ def main() -> None:
         "datasets": dataset_summaries,
         "results": all_rows,
         "regime_attribution": regime_rows,
+        "monte_carlo": monte_carlo_rows,
+        "monte_carlo_settings": {
+            "simulations_per_experiment": args.monte_carlo_simulations,
+            "seed": args.seed,
+        },
     }
     json_path.write_text(json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8")
     print(f"CSV report: {csv_path}")
     print(f"Regime attribution CSV: {regime_csv_path}")
+    print(f"Monte Carlo robustness CSV: {monte_carlo_csv_path}")
     print(f"JSON report: {json_path}")
 
 

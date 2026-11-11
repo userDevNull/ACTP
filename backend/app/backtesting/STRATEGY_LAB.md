@@ -69,6 +69,12 @@ The run writes:
 5. Inspect trade count, drawdown, exposure, funding and liquidation events. A strategy with very few trades is not statistically persuasive.
 6. Re-run with worse fees/slippage and verify the conclusion does not collapse.
 
+## Trade-level bootstrap robustness (Phase 9)
+
+Each strategy/segment/cost-scenario experiment also receives a reproducible trade-level bootstrap report. The default is 1,000 paths; configure it with `--monte-carlo-simulations 5000` and `--seed 123`. The report resamples the experiment's completed net trade PnL values with replacement, using the same number of trades per simulated path. It reports final-equity percentiles, a confidence interval, probability of ending below initial equity, probability of crossing zero equity, and median/95th-percentile maximum drawdown.
+
+The output adds `strategy_lab_monte_carlo.csv` and a `monte_carlo` section in the JSON report. This is a trade-level distribution diagnostic only: it does not preserve chronological dependence, overlapping positions, changing position sizing, market regimes or bar-level stop/liquidation paths. Do not interpret it as a forecast or as a replacement for out-of-sample testing. A zero-trade experiment returns unchanged equity and zero estimated path risk because there are no outcomes to resample.
+
 ## Important simulator limitations
 
 This laboratory uses the existing research-only isolated-margin Futures simulator. It does not reproduce Binance matching, mark-price liquidation, maintenance-margin tiers, order-book spread/depth, partial fills, precision/minimum notional, latency, ADL, insurance fund or cross-margin portfolio effects. Funding event timing is approximated at candle timestamps. No exchange orders or API credentials are used.
