@@ -83,7 +83,7 @@ def test_lab_rejects_unknown_timeframe_and_missing_volume():
 
 def test_regime_attribution_uses_signal_candle_before_entry():
     candles = sample_candles()
-    labels = _regime_labels(candles)
+    labels = _regime_labels(features(candles))
     entry_timestamp = candles.iloc[100]["timestamp"].isoformat()
     trade = {
         "entry_time": entry_timestamp,
