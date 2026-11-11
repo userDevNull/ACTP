@@ -114,6 +114,7 @@ def run_backtest(
             elif target_hit:
                 close_position(position["target"], "take_profit", i)
 
+        # Mark equity at this candle close before scheduling any next-open entry.
         # Signal at close i is only eligible for execution at open i+1.
         if i < len(candles) - 1:
             signal = strategy(candles.iloc[: i + 1], i)
