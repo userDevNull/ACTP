@@ -92,6 +92,15 @@ def _svg_line_chart(title: str, rows: list[dict], y_field: str) -> str:
              f'<line x1="{left}" y1="{ymap(0):.1f}" x2="{width-right}" y2="{ymap(0):.1f}" stroke="#94a3b8" stroke-dasharray="4 4"/>',
              f'<line x1="{left}" y1="{top}" x2="{left}" y2="{height-bottom}" stroke="#64748b"/>',
              f'<line x1="{left}" y1="{height-bottom}" x2="{width-right}" y2="{height-bottom}" stroke="#64748b"/>']
+    for tick in range(5):
+        value = min_y + (max_y - min_y) * tick / 4
+        y = ymap(value)
+        parts.append(f'<line x1="{left-4}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" stroke="#e2e8f0"/>')
+        parts.append(f'<text x="{left-9}" y="{y+4:.1f}" text-anchor="end" class="axis-label">{value:.1f}%</text>')
+    for value in sorted({point[0] for point in all_points}):
+        x = xmap(value)
+        parts.append(f'<line x1="{x:.1f}" y1="{height-bottom}" x2="{x:.1f}" y2="{height-bottom+4}" stroke="#64748b"/>')
+        parts.append(f'<text x="{x:.1f}" y="{height-bottom+18}" text-anchor="middle" class="axis-label">{value:g}x</text>')
     for index, (name, points) in enumerate(sorted(series.items())):
         points.sort()
         color = PALETTE[index % len(PALETTE)]
