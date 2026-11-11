@@ -418,6 +418,7 @@ Risk, fee and slippage values are bounded by the simulator's validation limits. 
 - `reports/phase10/strategy_lab_benchmarks.csv` — benchmark results by symbol, timeframe, segment and cost scenario.
 - `reports/phase10/strategy_lab_sensitivity.csv` — validation-only sensitivity results by strategy, parameter and multiplier.
 - `strategy_lab_report.json` includes both collections under `benchmarks` and `sensitivity`.
+- Main strategy result rows include `excess_return_vs_spot_pct` and `excess_return_vs_cash_pct`, comparing each strategy with the matching segment/cost baseline.
 
 Example run from `ACTP/backend`:
 
