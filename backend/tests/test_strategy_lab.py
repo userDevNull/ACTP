@@ -10,6 +10,7 @@ from app.backtesting.strategy_lab import (
     run_strategy_lab,
     strategy_catalog,
 )
+from app.intelligence.regime import features
 
 
 def sample_candles(n=200):
@@ -95,3 +96,14 @@ def test_regime_attribution_uses_signal_candle_before_entry():
     assert attribution[0]["regime"] == labels[99]
     assert attribution[0]["trades"] == 1
     assert attribution[0]["expectancy"] == 3.0
+
+
+
+def test_precomputed_strategy_callbacks_match_causal_reference_rules():
+    candles = sample_candles()
+    fast_catalog = strategy_catalog(features(candles))
+    reference_catalog = strategy_catalog()
+    for index in (69, 80, 120, 160, 199):
+        history = candles.iloc[: index + 1]
+        for name in fast_catalog:
+            assert fast_catalog[name](history, index) == reference_catalog[name](history, index)
