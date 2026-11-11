@@ -88,7 +88,8 @@ def run_backtest(
         exit_fee = abs(fill * qty) * cfg.fee_rate
         funding = position["notional"] * cfg.funding_rate_per_bar * position["bars_held"] * direction
         net = gross - exit_fee - position["entry_fee"] - funding
-        cash += net
+        # Entry fee was deducted from cash when the position was opened.
+        cash += gross - exit_fee - funding
         trades.append({
             "side": "LONG" if direction == 1 else "SHORT",
             "entry_index": position["entry_index"],
