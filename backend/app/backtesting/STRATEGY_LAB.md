@@ -75,6 +75,23 @@ Each strategy/segment/cost-scenario experiment also receives a reproducible trad
 
 The output adds `strategy_lab_monte_carlo.csv` and a `monte_carlo` section in the JSON report. This is a trade-level distribution diagnostic only: it does not preserve chronological dependence, overlapping positions, changing position sizing, market regimes or bar-level stop/liquidation paths. Do not interpret it as a forecast or as a replacement for out-of-sample testing. A zero-trade experiment returns unchanged equity and zero estimated path risk because there are no outcomes to resample.
 
+## Benchmarks and sensitivity analysis (Phase 10)
+
+Every train, validation and test segment is compared with two baselines under both configured cost scenarios:
+- `buy_and_hold_long`: a long signal from the beginning of the segment, filled at the next candle open and held until the segment ends
+- `cash_no_trade`: no position and no trading fees
+
+These benchmarks use the same simulator, initial virtual equity, fee/slippage assumptions and supplied funding events as the strategy experiment. Buy-and-hold is a long-only reference, not a risk-matched portfolio benchmark. The cash baseline is a zero-exposure reference.
+
+One-factor-at-a-time sensitivity analysis is run on the validation segment only. It varies risk fraction, leverage, taker fee and slippage at 0.5x, 1x, 1.5x and 2x the configured base value (subject to simulator safety bounds). It does not tune strategy parameters, change stop/target distances, or modify funding assumptions. Treat it as a stability diagnostic, not an optimizer. Keep the final test segment untouched when making strategy choices.
+
+Additional output files:
+- `strategy_lab_benchmarks.csv` — baseline metrics by symbol, timeframe, segment and cost scenario
+- `strategy_lab_sensitivity.csv` — validation-only results by strategy, tested parameter and multiplier
+- Both datasets are also included in `strategy_lab_report.json` under `benchmarks` and `sensitivity`
+
+No new dependencies are required; the analysis uses the existing simulator, pandas and NumPy.
+
 ## Important simulator limitations
 
 This laboratory uses the existing research-only isolated-margin Futures simulator. It does not reproduce Binance matching, mark-price liquidation, maintenance-margin tiers, order-book spread/depth, partial fills, precision/minimum notional, latency, ADL, insurance fund or cross-margin portfolio effects. Funding event timing is approximated at candle timestamps. No exchange orders or API credentials are used.
