@@ -88,6 +88,21 @@ def test_lab_runs_all_strategies_across_three_splits_and_cost_scenarios():
         "train", "validation", "test"
     }
     assert {row["segment"] for row in report["sensitivity"]} == {"validation"}
+    assert all("excess_return_vs_spot_pct" in row for row in report["results"])
+    assert all("excess_return_vs_cash_pct" in row for row in report["results"])
+    validation_strategy = next(
+        row for row in report["results"]
+        if row["segment"] == "validation" and row["cost_scenario"] == "base_cost"
+    )
+    validation_spot = next(
+        row for row in report["benchmarks"]
+        if row["benchmark"] == "buy_and_hold_spot"
+        and row["segment"] == "validation"
+        and row["cost_scenario"] == "base_cost"
+    )
+    assert validation_strategy["excess_return_vs_spot_pct"] == round(
+        validation_strategy["net_return_pct"] - validation_spot["net_return_pct"], 4
+    )
     assert {row["parameter"] for row in report["sensitivity"]} == {
         "risk_fraction", "leverage", "taker_fee_rate", "slippage_rate"
     }
