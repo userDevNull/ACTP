@@ -81,10 +81,11 @@ def test_multi_timeframe_consensus_uses_only_closed_higher_timeframe_candles():
         "market_regime": ["RANGE", "TREND_UP"],
     })
     result = multi_timeframe_consensus({"1h": fast, "4h": slow})
-    # The 00:00 4h candle is not complete at 01:00; the 04:00 4h candle
-    # only becomes available at 08:00.
-    assert result.loc[0, "regime_4h"] == "RANGE"
-    assert result.loc[2, "regime_4h"] == "RANGE"
+    # The 00:00 4h candle closes at 04:00. It is unavailable to 1h
+    # candles closing before 04:00, and becomes visible at result row 3.
+    # The 04:00 4h candle closes at 08:00 and is visible at result row 7.
+    assert pd.isna(result.loc[0, "regime_4h"])
+    assert pd.isna(result.loc[2, "regime_4h"])
     assert result.loc[3, "regime_4h"] == "RANGE"
     assert result.loc[4, "regime_4h"] == "RANGE"
     assert result.loc[7, "regime_4h"] == "TREND_UP"
