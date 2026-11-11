@@ -9,6 +9,7 @@ import pandas as pd
 
 from app.backtesting.futures_simulator import FuturesConfig
 from app.backtesting.strategy_lab import run_strategy_lab
+from app.backtesting.report_visualization import write_research_dashboard
 
 
 def parse_dataset(value: str) -> tuple[str, str, Path, Path | None]:
@@ -104,6 +105,7 @@ def main() -> None:
     benchmark_csv_path = args.output_dir / "strategy_lab_benchmarks.csv"
     sensitivity_csv_path = args.output_dir / "strategy_lab_sensitivity.csv"
     json_path = args.output_dir / "strategy_lab_report.json"
+    html_path = args.output_dir / "strategy_lab_dashboard.html"
 
     results = pd.DataFrame(all_rows)
     if not results.empty:
@@ -134,12 +136,14 @@ def main() -> None:
         },
     }
     json_path.write_text(json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8")
+    write_research_dashboard(payload, html_path)
     print(f"CSV report: {csv_path}")
     print(f"Regime attribution CSV: {regime_csv_path}")
     print(f"Monte Carlo robustness CSV: {monte_carlo_csv_path}")
     print(f"Benchmark comparison CSV: {benchmark_csv_path}")
     print(f"Sensitivity analysis CSV: {sensitivity_csv_path}")
     print(f"JSON report: {json_path}")
+    print(f"Offline HTML dashboard: {html_path}")
 
 
 if __name__ == "__main__":
