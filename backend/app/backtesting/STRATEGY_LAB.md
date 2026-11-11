@@ -78,10 +78,10 @@ The output adds `strategy_lab_monte_carlo.csv` and a `monte_carlo` section in th
 ## Benchmarks and sensitivity analysis (Phase 10)
 
 Every train, validation and test segment is compared with two baselines under both configured cost scenarios:
-- `buy_and_hold_long`: a long signal from the beginning of the segment, filled at the next candle open and held until the segment ends
+- `buy_and_hold_spot`: fully funded spot exposure entered at the next candle open and held until the segment ends, with entry/exit fees and slippage
 - `cash_no_trade`: no position and no trading fees
 
-These benchmarks use the same simulator, initial virtual equity, fee/slippage assumptions and supplied funding events as the strategy experiment. Buy-and-hold is a long-only reference, not a risk-matched portfolio benchmark. The cash baseline is a zero-exposure reference.
+The spot benchmark uses the same starting equity and fee/slippage assumptions but does not use leverage, futures funding or liquidation; it is a fully funded spot reference, not a risk-matched futures benchmark. The cash baseline is uninvested equity with zero exposure and no transaction costs. Stress scenarios change spot entry/exit costs but funding assumptions do not apply to spot.
 
 One-factor-at-a-time sensitivity analysis is run on the validation segment only. It varies risk fraction, leverage, taker fee and slippage at 0.5x, 1x, 1.5x and 2x the configured base value (subject to simulator safety bounds). It does not tune strategy parameters, change stop/target distances, or modify funding assumptions. Treat it as a stability diagnostic, not an optimizer. Keep the final test segment untouched when making strategy choices.
 
