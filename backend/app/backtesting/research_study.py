@@ -44,7 +44,7 @@ def audit_market_dataset(
     if len(valid_ts) > 1 and not valid_ts.is_monotonic_increasing:
         warnings.append("Source timestamps are not ascending; the lab sorts them before simulation")
 
-    numeric = frame.loc[:, ("open", "high", "low", "close", "volume")].apply(
+    numeric = frame.loc[:, ["open", "high", "low", "close", "volume"]].apply(
         pd.to_numeric, errors="coerce"
     )
     values = numeric.to_numpy(dtype=float)
