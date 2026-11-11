@@ -343,6 +343,149 @@ def _evaluate_segment(
     return result, curve
 
 
+def _spot_buy_and_hold_segment(
+    frame: pd.DataFrame,
+    start: int,
+    end: int,
+    config: FuturesConfig,
+) -> tuple[list[dict], list[dict]]:
+    """Model a fully funded spot buy-and-hold position with entry/exit costs."""
+    if end - start < 2:
+        raise ValueError("Benchmark segment requires at least two candles")
+    entry_index = start + 1
+    entry_bar = frame.iloc[entry_index]
+    exit_bar = frame.iloc[end - 1]
+    entry_fill = float(entry_bar["open"]) * (1.0 + config.slippage_rate)
+    exit_fill = float(exit_bar["close"]) * (1.0 - config.slippage_rate)
+    entry_fee_rate = config.taker_fee_rate
+    quantity = config.initial_equity / (entry_fill * (1.0 + entry_fee_rate))
+    entry_fee = quantity * entry_fill * entry_fee_rate
+    cash = config.initial_equity - quantity * entry_fill - entry_fee
+    exit_fee = quantity * exit_fill * entry_fee_rate
+    final_equity = cash + quantity * exit_fill - exit_fee
+
+    curve = []
+    for index in range(start, end):
+        bar = frame.iloc[index]
+        if index < entry_index:
+            equity = config.initial_equity
+        else:
+            estimated_exit = float(bar["close"]) * (1.0 - config.slippage_rate)
+            equity = cash + quantity * estimated_exit * (1.0 - entry_fee_rate)
+        curve.append({
+            "timestamp": bar["timestamp"].isoformat(),
+            "equity": float(equity),
+        })
+    curve[-1]["equity"] = float(final_equity)
+    trade = {
+        "entry_time": entry_bar["timestamp"].isoformat(),
+        "exit_time": exit_bar["timestamp"].isoformat(),
+        "entry_price": entry_fill,
+        "exit_price": exit_fill,
+        "quantity": quantity,
+        "gross_pnl": (exit_fill - entry_fill) * quantity,
+        "fees": entry_fee + exit_fee,
+        "funding_paid": 0.0,
+        "net_pnl": final_equity - config.initial_equity,
+        "reason": "end_of_data",
+    }
+    return curve, [trade]
+
+
+def _benchmark_comparisons(
+    frame: pd.DataFrame,
+    segments: dict[str, tuple[int, int]],
+    scenarios: dict[str, tuple[FuturesConfig, pd.DataFrame | None]],
+    timeframe: str,
+) -> list[dict]:
+    """Compare with a fully funded spot hold and an uninvested cash baseline."""
+    output = []
+    for segment_name, (start, end) in segments.items():
+        for scenario_name, (scenario_config, _) in scenarios.items():
+            spot_curve, spot_trades = _spot_buy_and_hold_segment(
+                frame, start, end, scenario_config
+            )
+            spot_metrics = performance_metrics(
+                spot_curve, spot_trades, scenario_config.initial_equity,
+                BARS_PER_YEAR[timeframe],
+            )
+            output.append({
+                "benchmark": "buy_and_hold_spot",
+                "segment": segment_name,
+                "cost_scenario": scenario_name,
+                "start_index": start,
+                "end_index_exclusive": end,
+                **spot_metrics,
+            })
+
+            cash_curve = [
+                {"timestamp": frame.iloc[index]["timestamp"].isoformat(),
+                 "equity": scenario_config.initial_equity}
+                for index in range(start, end)
+            ]
+            cash_metrics = performance_metrics(
+                cash_curve, [], scenario_config.initial_equity,
+                BARS_PER_YEAR[timeframe],
+            )
+            output.append({
+                "benchmark": "cash_no_trade",
+                "segment": segment_name,
+                "cost_scenario": scenario_name,
+                "start_index": start,
+                "end_index_exclusive": end,
+                **cash_metrics,
+            })
+    return output
+
+
+def _sensitivity_analysis(
+    frame: pd.DataFrame,
+    funding: pd.DataFrame | None,
+    validation_start: int,
+    validation_end: int,
+    strategies: dict[str, Strategy],
+    base: FuturesConfig,
+    timeframe: str,
+) -> list[dict]:
+    """Run one-factor-at-a-time sensitivity on validation data only."""
+    dimensions = {
+        "risk_fraction": (0.5, 1.0, 1.5, 2.0),
+        "leverage": (0.5, 1.0, 1.5, 2.0),
+        "taker_fee_rate": (0.5, 1.0, 1.5, 2.0),
+        "slippage_rate": (0.5, 1.0, 1.5, 2.0),
+    }
+    output = []
+    for parameter, multipliers in dimensions.items():
+        for multiplier in multipliers:
+            raw_value = getattr(base, parameter) * multiplier
+            if parameter == "risk_fraction":
+                value = min(raw_value, 0.02)
+            elif parameter == "leverage":
+                value = max(raw_value, 1.0)
+            else:
+                value = min(raw_value, 0.099)
+            scenario_config = replace(base, **{parameter: value})
+            scenario_config.validate()
+            for strategy_name, strategy in strategies.items():
+                result, curve = _evaluate_segment(
+                    frame, funding, validation_start, validation_end,
+                    strategy, scenario_config,
+                )
+                metrics = performance_metrics(
+                    curve, result["trades"], base.initial_equity,
+                    BARS_PER_YEAR[timeframe],
+                )
+                output.append({
+                    "strategy": strategy_name,
+                    "segment": "validation",
+                    "parameter": parameter,
+                    "multiplier": multiplier,
+                    "parameter_value": value,
+                    **metrics,
+                })
+    return output
+
+
 def run_strategy_lab(
     candles: pd.DataFrame,
     funding: pd.DataFrame | None = None,
@@ -390,6 +533,16 @@ def run_strategy_lab(
     regime_rows = []
     monte_carlo_rows = []
     regime_labels = _regime_labels(indicator_frame)
+    benchmark_rows = _benchmark_comparisons(
+        frame, segments, scenarios, timeframe
+    )
+    sensitivity_rows = _sensitivity_analysis(
+        frame, funding, train_end, validation_end, strategies, base, timeframe
+    )
+    benchmark_lookup = {
+        (row["segment"], row["cost_scenario"], row["benchmark"]): row
+        for row in benchmark_rows
+    }
     for segment_name, (start, end) in segments.items():
         for strategy_name, strategy in strategies.items():
             for scenario_name, (scenario_config, scenario_funding) in scenarios.items():
@@ -420,6 +573,16 @@ def run_strategy_lab(
                     "end_index_exclusive": end,
                     "bars": end - start,
                     **metrics,
+                    "excess_return_vs_spot_pct": round(
+                        metrics["net_return_pct"] - benchmark_lookup[
+                            (segment_name, scenario_name, "buy_and_hold_spot")
+                        ]["net_return_pct"], 4
+                    ),
+                    "excess_return_vs_cash_pct": round(
+                        metrics["net_return_pct"] - benchmark_lookup[
+                            (segment_name, scenario_name, "cash_no_trade")
+                        ]["net_return_pct"], 4
+                    ),
                 })
                 for attribution in _regime_attribution(result["trades"], frame, regime_labels):
                     regime_rows.append({
@@ -447,4 +610,6 @@ def run_strategy_lab(
         "results": rows,
         "regime_attribution": regime_rows,
         "monte_carlo": monte_carlo_rows,
+        "benchmarks": benchmark_rows,
+        "sensitivity": sensitivity_rows,
     }

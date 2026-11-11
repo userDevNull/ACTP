@@ -75,6 +75,23 @@ Each strategy/segment/cost-scenario experiment also receives a reproducible trad
 
 The output adds `strategy_lab_monte_carlo.csv` and a `monte_carlo` section in the JSON report. This is a trade-level distribution diagnostic only: it does not preserve chronological dependence, overlapping positions, changing position sizing, market regimes or bar-level stop/liquidation paths. Do not interpret it as a forecast or as a replacement for out-of-sample testing. A zero-trade experiment returns unchanged equity and zero estimated path risk because there are no outcomes to resample.
 
+## Benchmarks and sensitivity analysis (Phase 10)
+
+Every train, validation and test segment is compared with two baselines under both configured cost scenarios:
+- `buy_and_hold_spot`: fully funded spot exposure entered at the next candle open and held until the segment ends, with entry/exit fees and slippage
+- `cash_no_trade`: no position and no trading fees
+
+The spot benchmark uses the same starting equity and fee/slippage assumptions but does not use leverage, futures funding or liquidation; it is a fully funded spot reference, not a risk-matched futures benchmark. The cash baseline is uninvested equity with zero exposure and no transaction costs. Stress scenarios change spot entry/exit costs but funding assumptions do not apply to spot.
+
+One-factor-at-a-time sensitivity analysis is run on the validation segment only. It varies risk fraction, leverage, taker fee and slippage at 0.5x, 1x, 1.5x and 2x the configured base value (subject to simulator safety bounds). It does not tune strategy parameters, change stop/target distances, or modify funding assumptions. Treat it as a stability diagnostic, not an optimizer. Keep the final test segment untouched when making strategy choices.
+
+Additional output files:
+- `strategy_lab_benchmarks.csv` — baseline metrics by symbol, timeframe, segment and cost scenario
+- `strategy_lab_sensitivity.csv` — validation-only results by strategy, tested parameter and multiplier
+- Both datasets are also included in `strategy_lab_report.json` under `benchmarks` and `sensitivity`. The main strategy results also include `excess_return_vs_spot_pct` and `excess_return_vs_cash_pct` for direct, segment-matched comparisons.
+
+No new dependencies are required; the analysis uses the existing simulator, pandas and NumPy.
+
 ## Important simulator limitations
 
 This laboratory uses the existing research-only isolated-margin Futures simulator. It does not reproduce Binance matching, mark-price liquidation, maintenance-margin tiers, order-book spread/depth, partial fills, precision/minimum notional, latency, ADL, insurance fund or cross-margin portfolio effects. Funding event timing is approximated at candle timestamps. No exchange orders or API credentials are used.

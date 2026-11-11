@@ -2,10 +2,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from app.backtesting.futures_simulator import FuturesConfig
+
 from app.backtesting.strategy_lab import (
     BARS_PER_YEAR,
     _regime_attribution,
     _regime_labels,
+    _spot_buy_and_hold_segment,
     performance_metrics,
     run_strategy_lab,
     strategy_catalog,
@@ -29,6 +32,23 @@ def test_strategy_catalog_contains_fixed_comparison_set():
     assert set(strategy_catalog()) == {
         "adaptive", "trend_crossover", "breakout", "momentum", "mean_reversion"
     }
+
+
+def test_spot_buy_and_hold_uses_next_open_and_has_no_futures_funding():
+    candles = sample_candles(10)
+    curve, trades = _spot_buy_and_hold_segment(
+        candles, 0, 10,
+        FuturesConfig(
+            initial_equity=500.0, leverage=1.0,
+            taker_fee_rate=0.001, slippage_rate=0.001,
+        ),
+    )
+    assert len(curve) == 10
+    assert len(trades) == 1
+    assert trades[0]["entry_time"] == candles.iloc[1]["timestamp"].isoformat()
+    assert trades[0]["funding_paid"] == 0.0
+    assert trades[0]["reason"] == "end_of_data"
+    assert curve[-1]["equity"] == trades[0]["net_pnl"] + 500.0
 
 
 def test_performance_metrics_calculates_core_statistics():
@@ -59,6 +79,41 @@ def test_lab_runs_all_strategies_across_three_splits_and_cost_scenarios():
     }
     assert len(report["results"]) == 5 * 3 * 2
     assert len(report["monte_carlo"]) == 5 * 3 * 2
+    assert len(report["benchmarks"]) == 2 * 3 * 2
+    assert len(report["sensitivity"]) == 5 * 4 * 4
+    assert {row["benchmark"] for row in report["benchmarks"]} == {
+        "buy_and_hold_spot", "cash_no_trade"
+    }
+    assert {row["segment"] for row in report["benchmarks"]} == {
+        "train", "validation", "test"
+    }
+    assert {row["segment"] for row in report["sensitivity"]} == {"validation"}
+    assert all("excess_return_vs_spot_pct" in row for row in report["results"])
+    assert all("excess_return_vs_cash_pct" in row for row in report["results"])
+    validation_strategy = next(
+        row for row in report["results"]
+        if row["segment"] == "validation" and row["cost_scenario"] == "base_cost"
+    )
+    validation_spot = next(
+        row for row in report["benchmarks"]
+        if row["benchmark"] == "buy_and_hold_spot"
+        and row["segment"] == "validation"
+        and row["cost_scenario"] == "base_cost"
+    )
+    assert validation_strategy["excess_return_vs_spot_pct"] == round(
+        validation_strategy["net_return_pct"] - validation_spot["net_return_pct"], 4
+    )
+    assert {row["parameter"] for row in report["sensitivity"]} == {
+        "risk_fraction", "leverage", "taker_fee_rate", "slippage_rate"
+    }
+    cash = next(
+        row for row in report["benchmarks"]
+        if row["benchmark"] == "cash_no_trade"
+        and row["segment"] == "validation"
+        and row["cost_scenario"] == "base_cost"
+    )
+    assert cash["final_equity"] == cash["initial_equity"]
+    assert cash["trades"] == 0
     assert all(row["simulations"] == 1000 for row in report["monte_carlo"])
     assert all(row["method"] == "trade_pnl_bootstrap_with_replacement" for row in report["monte_carlo"])
     assert {row["segment"] for row in report["results"]} == {
