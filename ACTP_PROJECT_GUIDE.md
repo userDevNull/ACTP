@@ -371,7 +371,25 @@ The same command is used by GitHub Actions. A passing test suite checks the impl
 - Futures simulation approximates liquidation, funding event ordering and fills; it is not a replica of Binance's matching or margin engine.
 - The risk policy is a separate precheck and is not yet integrated into a live execution engine.
 - No private Binance account connection, order placement, position management or live trading is enabled.
-- Next research improvements should include deeper regime-level equity attribution, benchmark comparisons, bootstrap/Monte Carlo robustness, sensitivity analysis and report visualizations before any execution work.
+- Next research improvements should include benchmark comparisons, sensitivity analysis and report visualizations before any execution work. Phase 9 now adds a trade-level bootstrap diagnostic; it does not replace chronological out-of-sample validation.
+
+## 11. Phase 9 — Trade-level bootstrap robustness
+
+Phase 9 adds a deterministic, offline bootstrap diagnostic to each Phase 7 strategy/segment/cost-scenario experiment. It uses only completed trade net PnL values from that experiment and resamples them with replacement for a configurable number of paths (default 1,000). The random seed is configurable and defaults to 42.
+
+From ACTP/backend, run the existing Phase 7 matrix with the new robustness options:
+
+~~~powershell
+python run_strategy_lab.py --dataset "BTCUSDT,1h,data/BTCUSDT_1h_futures_klines.csv,data/BTCUSDT_futures_funding.csv" --dataset "ETHUSDT,1h,data/ETHUSDT_1h_futures_klines.csv,data/ETHUSDT_futures_funding.csv" --monte-carlo-simulations 5000 --seed 123 --output-dir reports/phase9
+~~~
+
+Additional output:
+- reports/phase9/strategy_lab_monte_carlo.csv — one bootstrap summary per symbol, timeframe, strategy, segment and cost scenario
+- strategy_lab_report.json — includes the same results under `monte_carlo` and records simulation count and seed
+
+Reported fields include 5th/median/95th percentile final equity, confidence interval bounds, probability of ending below initial equity, probability of crossing zero equity, and median/95th percentile maximum drawdown. The default seed makes results reproducible for identical inputs and settings.
+
+**Critical limitation:** this is a trade-level bootstrap approximation, not a market-path simulation or forecast. It resamples completed net PnL with replacement and ignores chronological/serial dependence, overlapping exposure, changing position sizes, regime shifts, and bar-level execution/stop/liquidation paths. It must be interpreted alongside the untouched chronological test segment, multiple symbols/timeframes and stressed transaction costs. No new Python package is required; existing NumPy and pandas are used.
 
 **Development principle:** establish reproducible evidence, cost-aware positive expectancy and controlled drawdown before considering paper trading or real-money execution.
 
