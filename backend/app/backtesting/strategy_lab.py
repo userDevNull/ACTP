@@ -370,7 +370,8 @@ def run_strategy_lab(
         "validation": (train_end, validation_end),
         "test": (validation_end, len(frame)),
     }
-    indicator_frame = features(frame)\n    strategies = strategy_catalog(indicator_frame)
+    indicator_frame = features(frame)
+    strategies = strategy_catalog(indicator_frame)
     scenarios = {
         "base_cost": (base, funding),
         "2x_cost_stress": (
