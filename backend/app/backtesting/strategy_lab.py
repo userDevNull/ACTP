@@ -92,6 +92,79 @@ def strategy_catalog() -> dict[str, Strategy]:
     }
 
 
+
+def _regime_labels(candles: pd.DataFrame) -> list[str]:
+    """Classify each candle using only features available at that candle close."""
+    frame = features(candles)
+    labels: list[str] = []
+    required = ["adx", "atr_pct", "relative_volume", "ema_fast", "ema_slow",
+                "prior_high", "prior_low"]
+    for _, row in frame.iterrows():
+        if not np.isfinite(row[required].astype(float).to_numpy()).all():
+            labels.append("UNCERTAIN")
+            continue
+        price = float(row["close"])
+        adx = float(row["adx"])
+        atr_pct = float(row["atr_pct"])
+        rv = float(row["relative_volume"])
+        fast = float(row["ema_fast"])
+        slow = float(row["ema_slow"])
+        if atr_pct > 0.08:
+            regime = "UNCERTAIN"
+        elif price > row["prior_high"] and rv >= 1.5 and adx >= 18:
+            regime = "BREAKOUT_UP"
+        elif price < row["prior_low"] and rv >= 1.5 and adx >= 18:
+            regime = "BREAKOUT_DOWN"
+        elif adx >= 25 and fast > slow and price > slow:
+            regime = "TREND_UP"
+        elif adx >= 25 and fast < slow and price < slow:
+            regime = "TREND_DOWN"
+        elif adx < 20:
+            regime = "RANGE"
+        else:
+            regime = "UNCERTAIN"
+        labels.append(regime)
+    return labels
+
+
+def _regime_attribution(
+    trades: list[dict],
+    candles: pd.DataFrame,
+    labels: list[str],
+) -> list[dict]:
+    """Attribute each trade to the regime at its signal candle, before entry."""
+    timestamp_to_index = {
+        timestamp.isoformat(): index
+        for index, timestamp in enumerate(candles["timestamp"])
+    }
+    grouped: dict[str, list[dict]] = {}
+    for trade in trades:
+        entry_index = timestamp_to_index.get(trade["entry_time"])
+        if entry_index is None:
+            continue
+        signal_index = max(entry_index - 1, 0)
+        regime = labels[signal_index]
+        grouped.setdefault(regime, []).append(trade)
+
+    output = []
+    for regime, items in sorted(grouped.items()):
+        pnls = [float(item["net_pnl"]) for item in items]
+        wins = [value for value in pnls if value > 0]
+        losses = [value for value in pnls if value < 0]
+        gross_profit = sum(wins)
+        gross_loss = abs(sum(losses))
+        output.append({
+            "regime": regime,
+            "trades": len(items),
+            "net_pnl": round(sum(pnls), 8),
+            "win_rate_pct": round(len(wins) / len(items) * 100, 2),
+            "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
+            "expectancy": round(sum(pnls) / len(items), 8),
+            "fees_paid": round(sum(float(item["fees"]) for item in items), 8),
+            "funding_paid": round(sum(float(item["funding_paid"]) for item in items), 8),
+        })
+    return output
+
 def performance_metrics(
     equity_curve: list[dict],
     trades: list[dict],
@@ -209,6 +282,8 @@ def run_strategy_lab(
     }
 
     rows = []
+    regime_rows = []
+    regime_labels = _regime_labels(frame)
     for segment_name, (start, end) in segments.items():
         for strategy_name, strategy in strategies.items():
             for scenario_name, (scenario_config, scenario_funding) in scenarios.items():
@@ -228,6 +303,14 @@ def run_strategy_lab(
                     "bars": end - start,
                     **metrics,
                 })
+                for attribution in _regime_attribution(result["trades"], frame, regime_labels):
+                    regime_rows.append({
+                        "timeframe": timeframe,
+                        "strategy": strategy_name,
+                        "segment": segment_name,
+                        "cost_scenario": scenario_name,
+                        **attribution,
+                    })
 
     return {
         "warning": (
@@ -244,4 +327,5 @@ def run_strategy_lab(
         "strategies": list(strategies),
         "cost_scenarios": list(scenarios),
         "results": rows,
+        "regime_attribution": regime_rows,
     }
