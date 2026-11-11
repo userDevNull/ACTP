@@ -34,7 +34,7 @@ def audit_market_dataset(
         return {"status": "fail", "rows": len(candles), "errors": errors,
                 "warnings": warnings}
 
-    frame = candles.loc[:, CANDLE_COLUMNS].copy()
+    frame = candles.loc[:, list(CANDLE_COLUMNS)].copy()
     timestamps = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
     if timestamps.isna().any():
         errors.append(f"{int(timestamps.isna().sum())} invalid timestamps")
@@ -51,7 +51,7 @@ def audit_market_dataset(
     if not np.isfinite(values).all():
         errors.append("OHLCV contains missing or non-finite numeric values")
     else:
-        positive = (numeric.loc[:, ("open", "high", "low", "close")] > 0).all(axis=1)
+        positive = (numeric.loc[:, ["open", "high", "low", "close"]] > 0).all(axis=1)
         if not positive.all():
             errors.append(f"{int((~positive).sum())} rows contain non-positive prices")
         valid_ohlc = (
