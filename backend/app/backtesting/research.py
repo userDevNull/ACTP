@@ -1,7 +1,8 @@
 """Chronological research evaluation helpers.
 
 No hyperparameter search is performed here. The final test segment must remain
-untouched until strategy choices are frozen.
+untouched until strategy choices are frozen. Every segment starts with fresh
+virtual cash while retaining prior candles only for indicator warm-up.
 """
 from __future__ import annotations
 
@@ -40,12 +41,46 @@ def chronological_splits(
     return DataSplits(train_end, validation_end, length)
 
 
+def _segment_summary(
+    equity_curve: list[dict],
+    trades: list[dict],
+    initial_cash: float,
+) -> dict:
+    values = pd.Series([float(point["equity"]) for point in equity_curve], dtype=float)
+    if values.empty:
+        final_equity = initial_cash
+        max_drawdown_pct = 0.0
+    else:
+        final_equity = float(values.iloc[-1])
+        peaks = values.cummax()
+        max_drawdown_pct = float(((values / peaks) - 1.0).min() * 100.0)
+    pnl = [float(trade["net_pnl"]) for trade in trades]
+    wins = [value for value in pnl if value > 0]
+    losses = [value for value in pnl if value < 0]
+    gross_profit, gross_loss = sum(wins), abs(sum(losses))
+    return {
+        "initial_cash": float(initial_cash),
+        "final_equity": round(final_equity, 8),
+        "total_return_pct": round((final_equity / initial_cash - 1) * 100.0, 4),
+        "max_drawdown_pct": round(max_drawdown_pct, 4),
+        "trades": len(trades),
+        "win_rate_pct": round(len(wins) / len(trades) * 100.0, 2) if trades else 0.0,
+        "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
+        "average_trade_pnl": round(sum(pnl) / len(pnl), 8) if pnl else 0.0,
+        "gross_profit": round(gross_profit, 8),
+        "gross_loss": round(gross_loss, 8),
+    }
+
+
 def _run_segment(
     data: pd.DataFrame,
     start: int,
     end: int,
     config: BacktestConfig,
+    strategy=backtest_signal,
 ) -> dict:
+    if not 0 <= start < end <= len(data):
+        raise ValueError("Invalid segment boundaries")
     segment = data.iloc[:end].reset_index(drop=True)
 
     def gated_strategy(history: pd.DataFrame, index: int) -> int:
@@ -53,20 +88,20 @@ def _run_segment(
         # until the requested segment begins.
         if index < start:
             return 0
-        return backtest_signal(history, index)
+        return strategy(history, index)
 
     result = run_backtest(segment, gated_strategy, config)
     segment_trades = [
         trade for trade in result["trades"]
         if trade["entry_index"] >= start and trade["exit_index"] <= end - 1
     ]
-    # A trade opened before the segment or closed outside it is not counted
-    # in the segment metrics; the gate prevents new entries before start.
+    segment_curve = result["equity_curve"][start:end]
     return {
         "start_index": start,
         "end_index_exclusive": end,
-        "summary": result["summary"],
+        "summary": _segment_summary(segment_curve, segment_trades, config.initial_cash),
         "trades": segment_trades,
+        "equity_curve": segment_curve,
     }
 
 
@@ -82,7 +117,9 @@ def evaluate_adaptive(
     return {
         "warning": (
             "Research only. Do not tune against the final test segment. "
-            "Fees, slippage and funding assumptions may not match live fills."
+            "Each segment is evaluated with fresh initial cash; prior candles "
+            "are used only for indicator warm-up. Fees, slippage and funding "
+            "assumptions may not match live fills."
         ),
         "splits": {
             "train": _run_segment(data, 0, splits.train_end, cfg),
