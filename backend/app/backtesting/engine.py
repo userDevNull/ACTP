@@ -1,8 +1,9 @@
 """Small, deterministic OHLCV backtester for research and paper validation.
 
-Signals are evaluated at candle close and orders fill at the next candle open.
-This avoids same-candle look-ahead. If stop and target are both touched in one
-bar, the stop is assumed to fill first (conservative assumption).
+Signals are evaluated at candle close and queued for execution at the next
+candle open. Positions are marked only after that open and the current candle's
+range have occurred. If stop and target are both touched in one bar, the stop
+is assumed to fill first (conservative assumption).
 """
 from __future__ import annotations
 
@@ -35,6 +36,8 @@ class BacktestConfig:
             raise ValueError("stop_loss_pct must be in (0, 1)")
         if not 0 < self.take_profit_pct < 1:
             raise ValueError("take_profit_pct must be in (0, 1)")
+        if not 0 <= self.funding_rate_per_bar < 0.1:
+            raise ValueError("funding_rate_per_bar must be in [0, 0.1)")
         if not 0 <= self.fee_rate < 0.1 or not 0 <= self.slippage_rate < 0.1:
             raise ValueError("fee and slippage rates must be in [0, 0.1)")
         if self.max_leverage < 1:
@@ -74,6 +77,7 @@ def run_backtest(
 
     cash = cfg.initial_cash
     position = None
+    pending_signal: Signal = 0
     equity_curve = []
     trades = []
 
@@ -102,12 +106,49 @@ def run_backtest(
         })
         position = None
 
-    for i in range(len(candles)):
-        bar = candles.iloc[i]
+    def open_position(direction: int, raw_open: float, bar_index: int) -> None:
+        nonlocal cash, position
+        if cash <= 0:
+            return
+        entry = raw_open * (1 + cfg.slippage_rate if direction == 1 else 1 - cfg.slippage_rate)
+        risk_budget = cash * cfg.risk_per_trade
+        stop_distance = entry * cfg.stop_loss_pct
+        qty_by_risk = risk_budget / stop_distance
+        max_notional = cash * cfg.max_leverage
+        qty = min(qty_by_risk, max_notional / entry) if entry else 0.0
+        if qty <= 0:
+            return
+        notional = qty * entry
+        entry_fee = notional * cfg.fee_rate
+        if entry_fee >= cash:
+            return
+        cash -= entry_fee
+        position = {
+            "direction": direction,
+            "entry": entry,
+            "qty": qty,
+            "notional": notional,
+            "entry_fee": entry_fee,
+            "entry_index": bar_index,
+            "bars_held": 0,
+            "stop": entry * (1 - cfg.stop_loss_pct if direction == 1 else 1 + cfg.stop_loss_pct),
+            "target": entry * (1 + cfg.take_profit_pct if direction == 1 else 1 - cfg.take_profit_pct),
+        }
 
-        # Manage an existing position using this bar's range.
+    for i, bar in candles.iterrows():
+        raw_open = float(bar.open)
+        entered_this_bar = False
+
+        # Apply only the signal generated at the previous candle close.
+        if pending_signal != 0:
+            if position is not None and pending_signal == -position["direction"]:
+                close_position(raw_open, "reverse_signal", i)
+            if position is None:
+                open_position(int(pending_signal), raw_open, i)
+                entered_this_bar = position is not None
+
+        # Check the current candle's range only after any next-open entry.
         if position is not None:
-            position["bars_held"] += 1
             stop_hit = bar.low <= position["stop"] if position["direction"] == 1 else bar.high >= position["stop"]
             target_hit = bar.high >= position["target"] if position["direction"] == 1 else bar.low <= position["target"]
             if stop_hit:
@@ -115,51 +156,35 @@ def run_backtest(
             elif target_hit:
                 close_position(position["target"], "take_profit", i)
 
-        # Mark equity at this candle close before scheduling any next-open entry.
-        # Signal at close i is only eligible for execution at open i+1.
+        # A held position accrues one approximate bar of funding after surviving
+        # this candle. A position opened and closed within this bar accrues none.
+        if position is not None and not entered_this_bar:
+            position["bars_held"] += 1
+        elif position is not None and entered_this_bar:
+            position["bars_held"] += 1
+
+        unrealized = 0.0
+        if position is not None:
+            unrealized = (float(bar.close) - position["entry"]) * position["qty"] * position["direction"]
+        equity_curve.append({"index": i, "equity": cash + unrealized})
+
+        # Generate a fresh signal at this close for the following candle open.
+        pending_signal = 0
         if i < len(candles) - 1:
             signal = strategy(candles.iloc[: i + 1], i)
             if signal not in (-1, 0, 1):
                 raise ValueError("Strategy must return -1, 0, or 1")
-            if position is not None and signal == -position["direction"]:
-                close_position(float(candles.iloc[i + 1].open), "reverse_signal", i + 1)
-            if position is None and signal != 0:
-                next_open = float(candles.iloc[i + 1].open)
-                direction = int(signal)
-                entry = next_open * (1 + cfg.slippage_rate if direction == 1 else 1 - cfg.slippage_rate)
-                risk_budget = max(cash, 0) * cfg.risk_per_trade
-                stop_distance = entry * cfg.stop_loss_pct
-                qty = risk_budget / stop_distance
-                max_notional = max(cash, 0) * cfg.max_leverage
-                qty = min(qty, max_notional / entry) if entry else 0
-                if qty > 0:
-                    notional = qty * entry
-                    entry_fee = notional * cfg.fee_rate
-                    cash -= entry_fee
-                    position = {
-                        "direction": direction, "entry": entry, "qty": qty,
-                        "notional": notional, "entry_fee": entry_fee,
-                        "entry_index": i + 1, "bars_held": 0,
-                        "stop": entry * (1 - cfg.stop_loss_pct if direction == 1 else 1 + cfg.stop_loss_pct),
-                        "target": entry * (1 + cfg.take_profit_pct if direction == 1 else 1 - cfg.take_profit_pct),
-                    }
-
-        unrealized = 0.0
-        if position is not None:
-            mark = float(bar.close)
-            unrealized = (mark - position["entry"]) * position["qty"] * position["direction"]
-        equity_curve.append({"index": i, "equity": cash + unrealized})
+            pending_signal = int(signal)
 
     if position is not None:
         close_position(float(candles.iloc[-1].close), "end_of_data", len(candles) - 1)
         equity_curve[-1]["equity"] = cash
 
-    equity = pd.Series([p["equity"] for p in equity_curve], dtype=float)
-    returns = equity.pct_change().dropna()
+    equity = pd.Series([point["equity"] for point in equity_curve], dtype=float)
     peak = equity.cummax()
     drawdown = (equity / peak) - 1
-    wins = [t["net_pnl"] for t in trades if t["net_pnl"] > 0]
-    losses = [t["net_pnl"] for t in trades if t["net_pnl"] < 0]
+    wins = [trade["net_pnl"] for trade in trades if trade["net_pnl"] > 0]
+    losses = [trade["net_pnl"] for trade in trades if trade["net_pnl"] < 0]
     gross_profit = sum(wins)
     gross_loss = abs(sum(losses))
     total_return = (cash / cfg.initial_cash) - 1
@@ -174,7 +199,7 @@ def run_backtest(
             "trades": len(trades),
             "win_rate_pct": round(len(wins) / len(trades) * 100, 2) if trades else 0.0,
             "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
-            "average_trade_pnl": round(sum(t["net_pnl"] for t in trades) / len(trades), 8) if trades else 0.0,
+            "average_trade_pnl": round(sum(trade["net_pnl"] for trade in trades) / len(trades), 8) if trades else 0.0,
         },
         "trades": trades,
         "equity_curve": equity_curve,

@@ -29,3 +29,29 @@ def test_rejects_invalid_signal():
     data = pd.DataFrame({"open":[1,1,1], "high":[1,1,1], "low":[1,1,1], "close":[1,1,1]})
     with pytest.raises(ValueError):
         run_backtest(data, lambda history, index: 2)
+
+
+def test_signal_fills_at_next_open_and_does_not_mark_position_early():
+    data = pd.DataFrame({
+        "open": [100, 110, 112],
+        "high": [101, 111, 113],
+        "low": [99, 109, 111],
+        "close": [100, 110, 112],
+    })
+    result = run_backtest(
+        data,
+        lambda history, index: 1 if index == 0 else 0,
+        BacktestConfig(
+            initial_cash=500,
+            risk_per_trade=0.01,
+            stop_loss_pct=0.5,
+            take_profit_pct=0.5,
+            fee_rate=0,
+            slippage_rate=0,
+        ),
+    )
+    assert result["trades"][0]["entry_index"] == 1
+    assert result["trades"][0]["entry_price"] == 110
+    # No position exists during candle zero; it cannot be marked against the
+    # next candle's open or otherwise create a pre-entry loss.
+    assert result["equity_curve"][0]["equity"] == 500
