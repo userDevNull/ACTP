@@ -29,6 +29,8 @@ Sharpe/Sortino annualization assumes continuous crypto trading (365 days) at the
 Run from `backend/`:
 
 ```powershell
+python download_futures_history.py --symbol BTCUSDT --interval 15m --start 2023-01-01 --end 2025-01-01 --output data
+python download_futures_history.py --symbol ETHUSDT --interval 15m --start 2023-01-01 --end 2025-01-01 --output data
 python download_futures_history.py --symbol BTCUSDT --interval 1h --start 2023-01-01 --end 2025-01-01 --output data
 python download_futures_history.py --symbol ETHUSDT --interval 1h --start 2023-01-01 --end 2025-01-01 --output data
 python download_futures_history.py --symbol BTCUSDT --interval 4h --start 2023-01-01 --end 2025-01-01 --output data
@@ -51,8 +53,11 @@ Optional risk/configuration flags:
 - `--slippage 0.0005`
 - `--maintenance-margin 0.005`
 
+The run also classifies each trade by the market regime visible at the signal candle close (the candle before entry), avoiding use of the entry candle's future close. Regime attribution includes trade count, net PnL, win rate, profit factor, expectancy, fees and funding.
+
 The run writes:
 - `reports/phase7/strategy_lab_results.csv`
+- `reports/phase7/strategy_lab_regime_attribution.csv`
 - `reports/phase7/strategy_lab_report.json`
 
 ## How to interpret results
