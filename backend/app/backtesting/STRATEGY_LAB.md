@@ -112,3 +112,37 @@ Open `reports/phase11/strategy_lab_dashboard.html` in a browser. The dashboard i
 This laboratory uses the existing research-only isolated-margin Futures simulator. It does not reproduce Binance matching, mark-price liquidation, maintenance-margin tiers, order-book spread/depth, partial fills, precision/minimum notional, latency, ADL, insurance fund or cross-margin portfolio effects. Funding event timing is approximated at candle timestamps. No exchange orders or API credentials are used.
 
 A positive backtest is not evidence of future profitability and does not authorize live trading.
+
+
+## Cross-symbol and multi-timeframe validation study (Phase 12)
+
+Phase 12 adds two research outputs to every multi-dataset run:
+
+- `dataset_quality_audit.csv` — checks required OHLCV columns, parseable/duplicate timestamps, finite numeric values, positive prices, valid OHLC high/low relationships, non-negative volume, zero-volume bars, missing candle intervals and optional funding schema/rates. Duplicate timestamps, invalid OHLCV and malformed funding are fatal; gaps and zero-volume bars are warnings. The audit does not fabricate missing candles or repair source data.
+- `cross_market_validation.csv` — summarizes the untouched chronological test segment at base costs by strategy. It reports the number and percentage of datasets with positive returns, number/percentage beating the matched spot benchmark, median test return, median excess return versus spot, median drawdown, median within-dataset strategy rank and total trades.
+
+The cross-market summary treats each symbol/timeframe as one comparison unit and reports medians rather than pooling account returns across assets. It is a consistency diagnostic, not a statistical proof. Fewer than three symbol/timeframe datasets is explicitly marked insufficient coverage. A high positive-test percentage is not enough by itself: inspect drawdown, trade count, benchmark edge, fees/funding and the raw per-dataset results.
+
+Recommended study matrix: BTCUSDT, ETHUSDT, SOLUSDT and BNBUSDT on 15m, 1h and 4h, using the same historical date window where possible. Include the matching Futures funding CSV for each symbol (the downloader currently writes one funding file per symbol). Keep the final test split frozen; do not use its ranks to tune rules and then report the same test as independent evidence.
+
+Example downloads from `backend/` (end date exclusive):
+
+~~~powershell
+$symbols = @("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT")
+$frames = @("15m", "1h", "4h")
+foreach ($symbol in $symbols) {
+  foreach ($frame in $frames) {
+    python download_futures_history.py --symbol $symbol --interval $frame --start 2022-01-01 --end 2026-01-01 --output data
+  }
+}
+~~~
+
+Then run the matrix (example shown for BTC and ETH; repeat `--dataset` for each downloaded symbol/timeframe):
+
+~~~powershell
+python run_strategy_lab.py --dataset "BTCUSDT,15m,data/BTCUSDT_15m_futures_klines.csv,data/BTCUSDT_futures_funding.csv" --dataset "BTCUSDT,1h,data/BTCUSDT_1h_futures_klines.csv,data/BTCUSDT_futures_funding.csv" --dataset "BTCUSDT,4h,data/BTCUSDT_4h_futures_klines.csv,data/BTCUSDT_futures_funding.csv" --dataset "ETHUSDT,15m,data/ETHUSDT_15m_futures_klines.csv,data/ETHUSDT_futures_funding.csv" --dataset "ETHUSDT,1h,data/ETHUSDT_1h_futures_klines.csv,data/ETHUSDT_futures_funding.csv" --dataset "ETHUSDT,4h,data/ETHUSDT_4h_futures_klines.csv,data/ETHUSDT_futures_funding.csv" --monte-carlo-simulations 2000 --seed 42 --output-dir reports/phase12
+~~~
+
+The report folder now also contains `cross_market_validation.csv` and `dataset_quality_audit.csv`; both summaries are included in `strategy_lab_report.json`. A dataset that fails the integrity preflight stops the run with an actionable error. Warnings (for example missing intervals) remain visible in the audit so the researcher can decide whether the source is suitable.
+
+No new Python dependency is required. The simulator remains approximate and research-only. This study does not establish future profitability or validate live exchange execution.
