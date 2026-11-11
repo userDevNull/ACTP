@@ -1,7 +1,7 @@
 """Strategy comparison laboratory for chronological Binance Futures research."""
 from __future__ import annotations
 
-from dataclasses import asdict, replace
+from dataclasses import replace
 from typing import Callable
 
 import numpy as np
@@ -164,6 +164,7 @@ def _regime_attribution(
             "funding_paid": round(sum(float(item["funding_paid"]) for item in items), 8),
         })
     return output
+
 
 def performance_metrics(
     equity_curve: list[dict],
