@@ -81,8 +81,137 @@ def _mean_reversion(history: pd.DataFrame, index: int) -> int:
     return 0
 
 
-def strategy_catalog() -> dict[str, Strategy]:
-    """Return the fixed, versioned strategy set compared by Phase 7."""
+def _classify_feature_row(row: pd.Series) -> str:
+    required = ["adx", "atr_pct", "relative_volume", "ema_fast", "ema_slow",
+                "prior_high", "prior_low"]
+    if not np.isfinite(row[required].astype(float).to_numpy()).all():
+        return "UNCERTAIN"
+    price = float(row["close"])
+    adx = float(row["adx"])
+    atr_pct = float(row["atr_pct"])
+    rv = float(row["relative_volume"])
+    fast = float(row["ema_fast"])
+    slow = float(row["ema_slow"])
+    if atr_pct > 0.08:
+        return "UNCERTAIN"
+    if price > row["prior_high"] and rv >= 1.5 and adx >= 18:
+        return "BREAKOUT_UP"
+    if price < row["prior_low"] and rv >= 1.5 and adx >= 18:
+        return "BREAKOUT_DOWN"
+    if adx >= 25 and fast > slow and price > slow:
+        return "TREND_UP"
+    if adx >= 25 and fast < slow and price < slow:
+        return "TREND_DOWN"
+    if adx < 20:
+        return "RANGE"
+    return "UNCERTAIN"
+
+
+def _precomputed_catalog(indicators: pd.DataFrame) -> dict[str, Strategy]:
+    """Create causal O(1)-per-bar strategy callbacks from one indicator pass."""
+    def row_pair(index: int):
+        if index < 69 or index >= len(indicators):
+            return None, None
+        return indicators.iloc[index], indicators.iloc[index - 1]
+
+    def trend(history: pd.DataFrame, index: int) -> int:
+        row, prev = row_pair(index)
+        if row is None or not np.isfinite([row["adx"], row["ema_fast"], row["ema_slow"],
+                                           prev["ema_fast"], prev["ema_slow"]]).all():
+            return 0
+        if row["adx"] < 20:
+            return 0
+        if prev["ema_fast"] <= prev["ema_slow"] and row["ema_fast"] > row["ema_slow"]:
+            return 1
+        if prev["ema_fast"] >= prev["ema_slow"] and row["ema_fast"] < row["ema_slow"]:
+            return -1
+        return 0
+
+    def breakout(history: pd.DataFrame, index: int) -> int:
+        row, _ = row_pair(index)
+        if row is None or not np.isfinite([row["prior_high"], row["prior_low"],
+                                           row["relative_volume"]]).all():
+            return 0
+        if row["relative_volume"] < 1.2:
+            return 0
+        if row["close"] > row["prior_high"]:
+            return 1
+        if row["close"] < row["prior_low"]:
+            return -1
+        return 0
+
+    def momentum(history: pd.DataFrame, index: int) -> int:
+        row, _ = row_pair(index)
+        if row is None or not np.isfinite([row["ema_fast"], row["ema_slow"], row["rsi"],
+                                           row["relative_volume"]]).all():
+            return 0
+        if row["relative_volume"] < 1.0:
+            return 0
+        if row["close"] > row["ema_fast"] > row["ema_slow"] and row["rsi"] >= 60:
+            return 1
+        if row["close"] < row["ema_fast"] < row["ema_slow"] and row["rsi"] <= 40:
+            return -1
+        return 0
+
+    def mean_reversion(history: pd.DataFrame, index: int) -> int:
+        row, _ = row_pair(index)
+        if row is None or not np.isfinite([row["adx"], row["lower_band"], row["upper_band"],
+                                           row["rsi"]]).all() or row["adx"] >= 20:
+            return 0
+        if row["close"] < row["lower_band"] and row["rsi"] < 35:
+            return 1
+        if row["close"] > row["upper_band"] and row["rsi"] > 65:
+            return -1
+        return 0
+
+    def adaptive(history: pd.DataFrame, index: int) -> int:
+        row, previous = row_pair(index)
+        if row is None:
+            return 0
+        regime = _classify_feature_row(row)
+        if regime in ("UNCERTAIN",):
+            return 0
+        required = ["close", "ema_fast", "ema_slow", "sma20", "upper_band",
+                    "lower_band", "rsi", "relative_volume", "atr_pct"]
+        if not np.isfinite(row[required].astype(float).to_numpy()).all():
+            return 0
+        price = float(row["close"])
+        rsi = float(row["rsi"])
+        if regime in ("BREAKOUT_UP", "BREAKOUT_DOWN"):
+            return 1 if regime == "BREAKOUT_UP" else -1
+        if regime == "RANGE":
+            if price < row["lower_band"] and rsi < 35:
+                return 1
+            if price > row["upper_band"] and rsi > 65:
+                return -1
+            return 0
+        side = 1 if regime == "TREND_UP" else -1
+        fast = float(row["ema_fast"])
+        prev_close = float(previous["close"])
+        prev_fast = float(previous["ema_fast"])
+        if side == 1 and prev_close <= prev_fast and price > fast and 40 <= rsi <= 70:
+            return 1
+        if side == -1 and prev_close >= prev_fast and price < fast and 30 <= rsi <= 60:
+            return -1
+        if side == 1 and price > float(previous["high"]) and rsi >= 60 and row["relative_volume"] >= 1.3:
+            return 1
+        if side == -1 and price < float(previous["low"]) and rsi <= 40 and row["relative_volume"] >= 1.3:
+            return -1
+        return 0
+
+    return {
+        "adaptive": adaptive,
+        "trend_crossover": trend,
+        "breakout": breakout,
+        "momentum": momentum,
+        "mean_reversion": mean_reversion,
+    }
+
+
+def strategy_catalog(indicators: pd.DataFrame | None = None) -> dict[str, Strategy]:
+    """Return the fixed Phase 7 strategy set, optionally using precomputed features."""
+    if indicators is not None:
+        return _precomputed_catalog(indicators)
     return {
         "adaptive": backtest_signal,
         "trend_crossover": _trend,
@@ -93,38 +222,9 @@ def strategy_catalog() -> dict[str, Strategy]:
 
 
 
-def _regime_labels(candles: pd.DataFrame) -> list[str]:
-    """Classify each candle using only features available at that candle close."""
-    frame = features(candles)
-    labels: list[str] = []
-    required = ["adx", "atr_pct", "relative_volume", "ema_fast", "ema_slow",
-                "prior_high", "prior_low"]
-    for _, row in frame.iterrows():
-        if not np.isfinite(row[required].astype(float).to_numpy()).all():
-            labels.append("UNCERTAIN")
-            continue
-        price = float(row["close"])
-        adx = float(row["adx"])
-        atr_pct = float(row["atr_pct"])
-        rv = float(row["relative_volume"])
-        fast = float(row["ema_fast"])
-        slow = float(row["ema_slow"])
-        if atr_pct > 0.08:
-            regime = "UNCERTAIN"
-        elif price > row["prior_high"] and rv >= 1.5 and adx >= 18:
-            regime = "BREAKOUT_UP"
-        elif price < row["prior_low"] and rv >= 1.5 and adx >= 18:
-            regime = "BREAKOUT_DOWN"
-        elif adx >= 25 and fast > slow and price > slow:
-            regime = "TREND_UP"
-        elif adx >= 25 and fast < slow and price < slow:
-            regime = "TREND_DOWN"
-        elif adx < 20:
-            regime = "RANGE"
-        else:
-            regime = "UNCERTAIN"
-        labels.append(regime)
-    return labels
+def _regime_labels(indicator_frame: pd.DataFrame) -> list[str]:
+    """Return causal regime labels from a precomputed indicator frame."""
+    return [_classify_feature_row(row) for _, row in indicator_frame.iterrows()]
 
 
 def _regime_attribution(
@@ -270,7 +370,7 @@ def run_strategy_lab(
         "validation": (train_end, validation_end),
         "test": (validation_end, len(frame)),
     }
-    strategies = strategy_catalog()
+    indicator_frame = features(frame)\n    strategies = strategy_catalog(indicator_frame)
     scenarios = {
         "base_cost": (base, funding),
         "2x_cost_stress": (
@@ -284,7 +384,7 @@ def run_strategy_lab(
 
     rows = []
     regime_rows = []
-    regime_labels = _regime_labels(frame)
+    regime_labels = _regime_labels(indicator_frame)
     for segment_name, (start, end) in segments.items():
         for strategy_name, strategy in strategies.items():
             for scenario_name, (scenario_config, scenario_funding) in scenarios.items():
