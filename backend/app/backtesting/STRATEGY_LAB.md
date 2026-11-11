@@ -92,6 +92,21 @@ Additional output files:
 
 No new dependencies are required; the analysis uses the existing simulator, pandas and NumPy.
 
+## Offline research dashboard (Phase 11)
+
+The strategy laboratory now writes a self-contained HTML dashboard alongside the CSV and JSON reports:
+- `strategy_lab_dashboard.html` — validation strategy returns, matched benchmark returns, strategy scorecard, bootstrap final-equity intervals and per-dataset sensitivity charts
+
+The dashboard is generated with Python's standard library and embedded SVG. It has no external JavaScript, CDN, image or font dependencies and can be opened locally in a browser without internet access. It reads the combined experiment payload, so a multi-symbol/timeframe run produces corresponding comparison and sensitivity panels.
+
+Run the normal CLI; dashboard generation is automatic:
+
+~~~powershell
+python run_strategy_lab.py --dataset "BTCUSDT,1h,data/BTCUSDT_1h_futures_klines.csv,data/BTCUSDT_futures_funding.csv" --dataset "ETHUSDT,1h,data/ETHUSDT_1h_futures_klines.csv,data/ETHUSDT_futures_funding.csv" --monte-carlo-simulations 2000 --seed 42 --output-dir reports/phase11
+~~~
+
+Open `reports/phase11/strategy_lab_dashboard.html` in a browser. The dashboard is a presentation layer for the underlying CSV/JSON outputs; use those raw files for exact numeric analysis and reproducibility.
+
 ## Important simulator limitations
 
 This laboratory uses the existing research-only isolated-margin Futures simulator. It does not reproduce Binance matching, mark-price liquidation, maintenance-margin tiers, order-book spread/depth, partial fills, precision/minimum notional, latency, ADL, insurance fund or cross-margin portfolio effects. Funding event timing is approximated at candle timestamps. No exchange orders or API credentials are used.
