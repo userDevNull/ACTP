@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from app.backtesting.futures_simulator import FuturesConfig, run_futures_backtest
+from app.backtesting.robustness import trade_bootstrap_analysis
 from app.intelligence.regime import features
 from app.strategies.adaptive import backtest_signal
 
@@ -347,8 +348,10 @@ def run_strategy_lab(
     funding: pd.DataFrame | None = None,
     timeframe: str = "1h",
     config: FuturesConfig | None = None,
+    monte_carlo_simulations: int = 1000,
+    monte_carlo_seed: int = 42,
 ) -> dict:
-    """Compare five fixed strategies across train/validation/test and cost stress."""
+    """Compare five strategies across chronological splits, costs and bootstrap robustness."""
     if timeframe not in BARS_PER_YEAR:
         raise ValueError(f"Unsupported timeframe: {timeframe}")
     required = {"timestamp", "open", "high", "low", "close", "volume"}
@@ -385,6 +388,7 @@ def run_strategy_lab(
 
     rows = []
     regime_rows = []
+    monte_carlo_rows = []
     regime_labels = _regime_labels(indicator_frame)
     for segment_name, (start, end) in segments.items():
         for strategy_name, strategy in strategies.items():
@@ -395,6 +399,18 @@ def run_strategy_lab(
                 metrics = performance_metrics(
                     curve, result["trades"], base.initial_equity, BARS_PER_YEAR[timeframe]
                 )
+                bootstrap = trade_bootstrap_analysis(
+                    result["trades"], base.initial_equity,
+                    simulations=monte_carlo_simulations,
+                    seed=monte_carlo_seed + len(monte_carlo_rows),
+                )
+                monte_carlo_rows.append({
+                    "timeframe": timeframe,
+                    "strategy": strategy_name,
+                    "segment": segment_name,
+                    "cost_scenario": scenario_name,
+                    **bootstrap,
+                })
                 rows.append({
                     "timeframe": timeframe,
                     "strategy": strategy_name,
@@ -430,4 +446,5 @@ def run_strategy_lab(
         "cost_scenarios": list(scenarios),
         "results": rows,
         "regime_attribution": regime_rows,
+        "monte_carlo": monte_carlo_rows,
     }
