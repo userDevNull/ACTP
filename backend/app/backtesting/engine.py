@@ -173,7 +173,7 @@ def run_backtest(
             "max_drawdown_pct": round(float(drawdown.min()) * 100, 4),
             "trades": len(trades),
             "win_rate_pct": round(len(wins) / len(trades) * 100, 2) if trades else 0.0,
-            "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else (None if gross_profit == 0 else float("inf")),
+            "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
             "average_trade_pnl": round(sum(t["net_pnl"] for t in trades) / len(trades), 8) if trades else 0.0,
         },
         "trades": trades,
