@@ -1,4 +1,4 @@
-# ACTP backend: Phases 8-10 use existing pandas/NumPy dependencies; no extra packages required.
+# ACTP backend: Phases 8-11 use existing pandas/NumPy and Python stdlib; no extra packages required.
 aiodns==4.0.4
 aiohappyeyeballs==2.6.2
 aiohttp==3.13.5
