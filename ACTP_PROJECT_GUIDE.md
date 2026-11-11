@@ -51,7 +51,8 @@
 - Research-only isolated-margin Futures simulator.
 - Taker fee, slippage, funding-event and estimated liquidation calculations.
 - End-of-data position closure and trade/equity reporting.
-- Chronological train/validation/test split helper.
+- Chronological train/validation/test split helper with segment-isolated metrics.
+- Next-candle-open execution and equity marking corrected to avoid pre-entry marking.
 - Automated backend tests and GitHub Actions workflow.
 
 **Simulation limitations:** the Futures simulator is not Binance-exact. It does not fully model mark-price liquidation, maintenance-margin tiers, order-book spread/depth, partial fills, exchange precision/minimums, latency, ADL, insurance fund or cross-margin portfolio effects. Funding event ordering inside a candle is approximated. Treat all results as research estimates.
@@ -74,9 +75,12 @@ Two cost scenarios are included:
 
 Metrics include net return, maximum drawdown, trade count, win rate, profit factor, expectancy, average win/loss, annualized Sharpe and Sortino estimates, recovery factor, estimated liquidations, funding paid and fees paid.
 
-The CLI accepts multiple symbol/timeframe datasets and creates:
+The CLI accepts multiple symbol/timeframe datasets (including 15m, 1h and 4h) and creates:
 - strategy_lab_results.csv
+- strategy_lab_regime_attribution.csv
 - strategy_lab_report.json
+
+Each completed trade is also attributed to the market regime visible at the signal candle close before entry. This helps identify whether a strategy behaves differently in trends, ranges and breakouts.
 
 Do not tune strategies against the final test period. Compare stability across symbols, timeframes, market regimes and stressed costs; do not choose a strategy only because it has the highest historical return.
 
@@ -208,6 +212,8 @@ The local dashboard can start without internet, but its live market panels will 
 Run from ACTP/backend:
 
 ~~~powershell
+python download_futures_history.py --symbol BTCUSDT --interval 15m --start 2023-01-01 --end 2025-01-01 --output data
+python download_futures_history.py --symbol ETHUSDT --interval 15m --start 2023-01-01 --end 2025-01-01 --output data
 python download_futures_history.py --symbol BTCUSDT --interval 1h --start 2023-01-01 --end 2025-01-01 --output data
 python download_futures_history.py --symbol ETHUSDT --interval 1h --start 2023-01-01 --end 2025-01-01 --output data
 python download_futures_history.py --symbol BTCUSDT --interval 4h --start 2023-01-01 --end 2025-01-01 --output data
@@ -244,6 +250,7 @@ The defaults are conservative research assumptions, not a recommendation or a pr
 ### Step 4 — Open reports
 
 - Open backend/reports/phase7/strategy_lab_results.csv in Excel or LibreOffice.
+- Open backend/reports/phase7/strategy_lab_regime_attribution.csv to compare results across market regimes.
 - Open backend/reports/phase7/strategy_lab_report.json in a code editor for the complete output.
 - Compare train and validation results first. Keep the final test set untouched until choices are frozen.
 
