@@ -1,7 +1,7 @@
 # ACTP — Project, Features and Setup Guide
 
 **Repository:** https://github.com/userDevNull/ACTP  
-**Current development:** Phase 8 — Offline Market Intelligence (diagnostics, regime transitions and persistence)  
+**Current development:** Phase 11 — Offline Research Report Visualizations  
 **Backend:** Python 3.12, FastAPI, pandas, NumPy  
 **Frontend:** React, Vite, Tailwind CSS  
 **Exchange data:** Binance Spot (existing dashboard) and public Binance USDⓈ-M Futures endpoints (research data)
@@ -427,6 +427,25 @@ python run_strategy_lab.py --dataset "BTCUSDT,1h,data/BTCUSDT_1h_futures_klines.
 ~~~
 
 No new Python dependency is required. Existing pandas, NumPy and the research-only futures simulator are used. No exchange orders or live API credentials are used.
+
+## 13. Phase 11 — Offline research report visualizations
+
+Phase 11 adds a self-contained HTML research dashboard generated automatically by `run_strategy_lab.py`. It presents:
+- Validation strategy returns after configured costs
+- Matched spot buy-and-hold and cash benchmark returns for validation and test
+- A validation scorecard with excess return versus spot, maximum drawdown and trade count
+- Validation trade-bootstrap final-equity intervals (5th–95th percentile and median)
+- Per-symbol/timeframe sensitivity line charts for risk fraction, leverage, taker fee and slippage
+
+From `ACTP/backend`, run the normal strategy lab command with your local candle and optional funding CSVs. Example:
+
+~~~powershell
+python run_strategy_lab.py --dataset "BTCUSDT,1h,data/BTCUSDT_1h_futures_klines.csv,data/BTCUSDT_futures_funding.csv" --dataset "ETHUSDT,1h,data/ETHUSDT_1h_futures_klines.csv,data/ETHUSDT_futures_funding.csv" --monte-carlo-simulations 2000 --seed 42 --output-dir reports/phase11
+~~~
+
+The CLI now creates `reports/phase11/strategy_lab_dashboard.html` automatically, alongside the CSV and JSON reports. Open the HTML file in a browser. The dashboard uses embedded SVG and Python's standard library only: no internet connection, CDN, JavaScript library or additional package is needed. CSV and JSON remain the source of exact numeric results; the dashboard is a visual summary.
+
+The dashboard is historical research presentation, not a forecast, trade recommendation or live execution interface.
 
 **Development principle:** establish reproducible evidence, cost-aware positive expectancy and controlled drawdown before considering paper trading or real-money execution.
 
