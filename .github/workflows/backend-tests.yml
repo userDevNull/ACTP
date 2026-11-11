@@ -3,7 +3,17 @@ name: Backend tests
 on:
   push:
     branches: ["main", "chore/**"]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
   pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
+
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pytest:
