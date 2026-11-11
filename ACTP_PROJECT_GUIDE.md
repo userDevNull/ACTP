@@ -391,11 +391,23 @@ Outputs:
 - reports/phase8/market_diagnostics.csv — one row per candle
 - reports/phase8/market_summary.json — latest state, regime counts, transition probabilities and persistence summary
 - reports/phase8/regime_transition_matrix.csv — counts of transitions from each regime to the next
+- reports/phase8/regime_transition_probabilities.csv — row-normalized transition probabilities
+- reports/phase8/multi_timeframe_consensus.csv — optional closed-candle-aligned regime agreement across timeframes
 - reports/phase8/regime_persistence.csv — episode counts and average, median and maximum duration in candles
 
 This tool works without internet once Python dependencies and historical CSVs are present. It is diagnostic research, not a BUY/SELL signal or live execution. The existing dashboard still needs internet for live prices.
 
 **Interpretation caution:** transition probabilities and duration statistics are retrospective summaries of the entire supplied sample. They are not causal live features and must not be used as if known at the beginning of that sample. Duration is measured in candles; convert to clock time using the dataset timeframe.
+
+### Multi-timeframe agreement
+
+Pass at least two timeframe CSVs to the same CLI. Input candle timestamps are interpreted as candle-open times; a timeframe's regime becomes available only after that candle's close. The tool aligns the latest completed higher-timeframe regime to each lower-timeframe close, preventing unfinished 4h candles from leaking into 1h observations.
+
+~~~powershell
+python run_market_intelligence.py --timeframe-dataset "1h,data/BTCUSDT_1h_futures_klines.csv" --timeframe-dataset "4h,data/BTCUSDT_4h_futures_klines.csv" --output-dir reports/phase8
+~~~
+
+The output `multi_timeframe_consensus.csv` contains each timeframe's available regime, the majority consensus and the agreement ratio. `MIXED` means no regime has a strict majority; `UNCERTAIN` means no timeframe has a classified regime. This is historical diagnostic context, not an entry signal. The multi-timeframe alignment assumes each CSV's timestamps mark candle opens and that the source candles are complete and correctly ordered.
 
 ### Dependency and file maintenance
 
