@@ -31,3 +31,8 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Research-only datasets, generated reports and offline dependency cache
+backend/data/
+backend/reports/
+backend/wheelhouse/

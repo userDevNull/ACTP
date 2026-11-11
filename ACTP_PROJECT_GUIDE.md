@@ -1,7 +1,7 @@
 # ACTP — Project, Features and Setup Guide
 
 **Repository:** https://github.com/userDevNull/ACTP  
-**Current development:** Phase 7 — Strategy Performance Laboratory  
+**Current development:** Phase 8 — Offline Market Intelligence (initial diagnostics)  
 **Backend:** Python 3.12, FastAPI, pandas, NumPy  
 **Frontend:** React, Vite, Tailwind CSS  
 **Exchange data:** Binance Spot (existing dashboard) and public Binance USDⓈ-M Futures endpoints (research data)
@@ -374,3 +374,27 @@ The same command is used by GitHub Actions. A passing test suite checks the impl
 - Next research improvements should include deeper regime-level equity attribution, benchmark comparisons, bootstrap/Monte Carlo robustness, sensitivity analysis and report visualizations before any execution work.
 
 **Development principle:** establish reproducible evidence, cost-aware positive expectancy and controlled drawdown before considering paper trading or real-money execution.
+
+---
+
+## 10. Phase 8 — Offline Market Intelligence (initial implementation)
+
+The Phase 8 diagnostic engine uses existing pandas and NumPy dependencies (no new Python packages needed). It calculates causal, closed-candle market regime classifications, rolling realized volatility, relative volatility expansion/contraction, ADX trend strength, ATR percentage, relative volume and volume-confirmed 20-candle breakouts. Warm-up/insufficient data is classified as UNCERTAIN.
+
+With historical candle CSVs downloaded earlier, run from ACTP/backend:
+
+~~~powershell
+python run_market_intelligence.py --candles data/BTCUSDT_1h_futures_klines.csv --output-dir reports/phase8
+~~~
+
+Outputs:
+- reports/phase8/market_diagnostics.csv — one row per candle
+- reports/phase8/market_summary.json — latest state and observed regime counts
+
+This tool works without internet once Python dependencies and historical CSVs are present. It is diagnostic research, not a BUY/SELL signal or live execution. The existing dashboard still needs internet for live prices. Later Phase 8 work may add multi-timeframe agreement, richer market structure and regime transition analysis; those are **not** implemented yet.
+
+### Dependency and file maintenance
+
+- backend/requirements.txt contains pandas, NumPy and pytest already needed by Phase 8; no new dependency was required.
+- .gitignore excludes backend/reports/ and backend/data/ so historical datasets and reports remain local.
+- Backend tests include Phase 8 causal no-lookahead checks.

@@ -1,3 +1,4 @@
+# ACTP backend: Phase 8 uses existing pandas/NumPy dependencies; no extra packages required.
 aiodns==4.0.4
 aiohappyeyeballs==2.6.2
 aiohttp==3.13.5
