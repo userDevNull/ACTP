@@ -41,3 +41,59 @@ def test_invalid_timestamps_and_window_rejected():
         analyze_market(data.assign(timestamp=data["timestamp"].iloc[0]))
     with pytest.raises(ValueError, match="timestamp column"):
         analyze_market(data.drop(columns="timestamp"))
+
+
+from app.intelligence.regime_transitions import regime_transition_analysis
+
+
+def test_regime_transition_probabilities_and_episode_persistence():
+    frame = pd.DataFrame({"market_regime": [
+        "RANGE", "RANGE", "TREND_UP", "TREND_UP", "RANGE", "BREAKOUT_UP"
+    ]})
+    result = regime_transition_analysis(frame)
+    assert result["transitions_observed"] == 5
+    assert result["transition_counts"]["RANGE"]["TREND_UP"] == 1
+    assert result["transition_counts"]["RANGE"]["RANGE"] == 1
+    assert result["transition_probabilities"]["RANGE"]["TREND_UP"] == 0.33333333
+    assert sum(result["transition_probabilities"]["RANGE"].values()) == pytest.approx(1.0)
+    assert result["persistence"]["RANGE"]["episodes"] == 2
+    assert result["persistence"]["RANGE"]["average_duration_candles"] == 1.5
+    assert result["persistence"]["TREND_UP"]["max_duration_candles"] == 2
+
+
+def test_transition_analysis_rejects_empty_and_unknown_regimes():
+    with pytest.raises(ValueError, match="cannot be empty"):
+        regime_transition_analysis(pd.DataFrame())
+    with pytest.raises(ValueError, match="Unknown market regimes"):
+        regime_transition_analysis(pd.DataFrame({"market_regime": ["BULLISH"]}))
+
+
+from app.intelligence.multi_timeframe import multi_timeframe_consensus
+
+
+def test_multi_timeframe_consensus_uses_only_closed_higher_timeframe_candles():
+    fast = pd.DataFrame({
+        "timestamp": pd.date_range("2024-01-01", periods=8, freq="1h", tz="UTC"),
+        "market_regime": ["TREND_UP"] * 8,
+    })
+    slow = pd.DataFrame({
+        "timestamp": pd.to_datetime(["2024-01-01T00:00:00Z", "2024-01-01T04:00:00Z"]),
+        "market_regime": ["RANGE", "TREND_UP"],
+    })
+    result = multi_timeframe_consensus({"1h": fast, "4h": slow})
+    # The 00:00 4h candle closes at 04:00. It is unavailable to 1h
+    # candles closing before 04:00, and becomes visible at result row 3.
+    # The 04:00 4h candle closes at 08:00 and is visible at result row 7.
+    assert pd.isna(result.loc[0, "regime_4h"])
+    assert pd.isna(result.loc[2, "regime_4h"])
+    assert result.loc[3, "regime_4h"] == "RANGE"
+    assert result.loc[4, "regime_4h"] == "RANGE"
+    assert result.loc[7, "regime_4h"] == "TREND_UP"
+    assert result.loc[7, "consensus_regime"] == "TREND_UP"
+
+
+def test_multi_timeframe_consensus_requires_multiple_supported_frames():
+    with pytest.raises(ValueError, match="At least two"):
+        multi_timeframe_consensus({"1h": pd.DataFrame()})
+    with pytest.raises(ValueError, match="Unsupported timeframe"):
+        multi_timeframe_consensus({"1h": pd.DataFrame(), "17m": pd.DataFrame()})
