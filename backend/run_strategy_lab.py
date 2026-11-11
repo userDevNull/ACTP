@@ -81,6 +81,7 @@ def main() -> None:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = args.output_dir / "strategy_lab_results.csv"
+    regime_csv_path = args.output_dir / "strategy_lab_regime_attribution.csv"
     json_path = args.output_dir / "strategy_lab_report.json"
     results = pd.DataFrame(all_rows)
     if not results.empty:
