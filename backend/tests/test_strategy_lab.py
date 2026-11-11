@@ -59,6 +59,26 @@ def test_lab_runs_all_strategies_across_three_splits_and_cost_scenarios():
     }
     assert len(report["results"]) == 5 * 3 * 2
     assert len(report["monte_carlo"]) == 5 * 3 * 2
+    assert len(report["benchmarks"]) == 2 * 3 * 2
+    assert len(report["sensitivity"]) == 5 * 4 * 4
+    assert {row["benchmark"] for row in report["benchmarks"]} == {
+        "buy_and_hold_long", "cash_no_trade"
+    }
+    assert {row["segment"] for row in report["benchmarks"]} == {
+        "train", "validation", "test"
+    }
+    assert {row["segment"] for row in report["sensitivity"]} == {"validation"}
+    assert {row["parameter"] for row in report["sensitivity"]} == {
+        "risk_fraction", "leverage", "taker_fee_rate", "slippage_rate"
+    }
+    cash = next(
+        row for row in report["benchmarks"]
+        if row["benchmark"] == "cash_no_trade"
+        and row["segment"] == "validation"
+        and row["cost_scenario"] == "base_cost"
+    )
+    assert cash["final_equity"] == cash["initial_equity"]
+    assert cash["trades"] == 0
     assert all(row["simulations"] == 1000 for row in report["monte_carlo"])
     assert all(row["method"] == "trade_pnl_bootstrap_with_replacement" for row in report["monte_carlo"])
     assert {row["segment"] for row in report["results"]} == {
