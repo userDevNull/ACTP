@@ -343,6 +343,88 @@ def _evaluate_segment(
     return result, curve
 
 
+def _benchmark_comparisons(
+    frame: pd.DataFrame,
+    funding: pd.DataFrame | None,
+    segments: dict[str, tuple[int, int]],
+    scenarios: dict[str, tuple[FuturesConfig, pd.DataFrame | None]],
+    timeframe: str,
+) -> list[dict]:
+    """Compare strategy-independent long buy-and-hold and cash baselines."""
+    output = []
+    baselines: dict[str, Strategy] = {
+        "buy_and_hold_long": lambda history, index: 1,
+        "cash_no_trade": lambda history, index: 0,
+    }
+    for segment_name, (start, end) in segments.items():
+        for scenario_name, (scenario_config, scenario_funding) in scenarios.items():
+            for benchmark_name, benchmark in baselines.items():
+                result, curve = _evaluate_segment(
+                    frame, scenario_funding, start, end, benchmark, scenario_config
+                )
+                metrics = performance_metrics(
+                    curve, result["trades"], scenario_config.initial_equity,
+                    BARS_PER_YEAR[timeframe],
+                )
+                output.append({
+                    "benchmark": benchmark_name,
+                    "segment": segment_name,
+                    "cost_scenario": scenario_name,
+                    "start_index": start,
+                    "end_index_exclusive": end,
+                    **metrics,
+                })
+    return output
+
+
+def _sensitivity_analysis(
+    frame: pd.DataFrame,
+    funding: pd.DataFrame | None,
+    validation_start: int,
+    validation_end: int,
+    strategies: dict[str, Strategy],
+    base: FuturesConfig,
+    timeframe: str,
+) -> list[dict]:
+    """Run one-factor-at-a-time sensitivity on validation data only."""
+    dimensions = {
+        "risk_fraction": (0.5, 1.0, 1.5, 2.0),
+        "leverage": (0.5, 1.0, 1.5, 2.0),
+        "taker_fee_rate": (0.5, 1.0, 1.5, 2.0),
+        "slippage_rate": (0.5, 1.0, 1.5, 2.0),
+    }
+    output = []
+    for parameter, multipliers in dimensions.items():
+        for multiplier in multipliers:
+            raw_value = getattr(base, parameter) * multiplier
+            if parameter == "risk_fraction":
+                value = min(raw_value, 0.02)
+            elif parameter == "leverage":
+                value = max(raw_value, 1.0)
+            else:
+                value = min(raw_value, 0.099)
+            scenario_config = replace(base, **{parameter: value})
+            scenario_config.validate()
+            for strategy_name, strategy in strategies.items():
+                result, curve = _evaluate_segment(
+                    frame, funding, validation_start, validation_end,
+                    strategy, scenario_config,
+                )
+                metrics = performance_metrics(
+                    curve, result["trades"], base.initial_equity,
+                    BARS_PER_YEAR[timeframe],
+                )
+                output.append({
+                    "strategy": strategy_name,
+                    "segment": "validation",
+                    "parameter": parameter,
+                    "multiplier": multiplier,
+                    "parameter_value": value,
+                    **metrics,
+                })
+    return output
+
+
 def run_strategy_lab(
     candles: pd.DataFrame,
     funding: pd.DataFrame | None = None,
@@ -390,6 +472,12 @@ def run_strategy_lab(
     regime_rows = []
     monte_carlo_rows = []
     regime_labels = _regime_labels(indicator_frame)
+    benchmark_rows = _benchmark_comparisons(
+        frame, funding, segments, scenarios, timeframe
+    )
+    sensitivity_rows = _sensitivity_analysis(
+        frame, funding, train_end, validation_end, strategies, base, timeframe
+    )
     for segment_name, (start, end) in segments.items():
         for strategy_name, strategy in strategies.items():
             for scenario_name, (scenario_config, scenario_funding) in scenarios.items():
@@ -447,4 +535,6 @@ def run_strategy_lab(
         "results": rows,
         "regime_attribution": regime_rows,
         "monte_carlo": monte_carlo_rows,
+        "benchmarks": benchmark_rows,
+        "sensitivity": sensitivity_rows,
     }
