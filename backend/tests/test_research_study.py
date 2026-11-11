@@ -46,7 +46,7 @@ def test_dataset_audit_fails_duplicate_timestamps_and_invalid_ohlc():
 
 def test_dataset_audit_checks_funding_schema_and_finite_rates():
     funding = pd.DataFrame({
-        "timestamp": [pd.Timestamp("2024-01-01", tz="UTC")],
+        "funding_time": [pd.Timestamp("2024-01-01", tz="UTC")],
         "funding_rate": [float("nan")],
     })
     report = audit_market_dataset(candles(), "1h", funding)
@@ -100,3 +100,14 @@ def test_cross_market_summary_flags_insufficient_coverage():
     )
     assert summary[0]["interpretation"] == "Insufficient dataset coverage"
     assert summary[0]["beat_spot_pct"] is None
+
+
+def test_dataset_audit_accepts_native_binance_funding_csv_schema():
+    funding = pd.DataFrame({
+        "funding_time": [pd.Timestamp("2024-01-01", tz="UTC")],
+        "funding_rate": [0.0001],
+        "symbol": ["BTCUSDT"],
+    })
+    report = audit_market_dataset(candles(), "1h", funding)
+    assert report["status"] == "pass"
+    assert report["funding_rows"] == 1
