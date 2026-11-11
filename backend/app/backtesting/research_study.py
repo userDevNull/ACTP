@@ -95,7 +95,13 @@ def audit_market_dataset(
             errors.append(f"Missing funding columns: {', '.join(missing_funding)}")
         else:
             funding_rows = len(funding)
-            funding_ts = pd.to_datetime(funding[funding_timestamp_column], utc=True, errors="coerce")
+            # funding_ts = pd.to_datetime(funding[funding_timestamp_column], utc=True, errors="coerce")
+            funding_ts = pd.to_datetime(
+                funding[funding_timestamp_column],
+                utc=True,
+                errors="coerce",
+                format="mixed",
+            )
             rates = pd.to_numeric(funding["funding_rate"], errors="coerce")
             if funding_ts.isna().any() or not np.isfinite(rates.to_numpy(dtype=float)).all():
                 errors.append("Funding contains invalid timestamps or non-finite rates")

@@ -111,3 +111,20 @@ def test_dataset_audit_accepts_native_binance_funding_csv_schema():
     report = audit_market_dataset(candles(), "1h", funding)
     assert report["status"] == "pass"
     assert report["funding_rows"] == 1
+
+def test_dataset_audit_accepts_mixed_precision_funding_timestamps():
+    funding = pd.DataFrame({
+        "funding_time": [
+            "2024-01-01 00:00:00.006000+00:00",
+            "2024-01-01 08:00:00+00:00",
+            "2024-01-01 16:00:00.009000+00:00",
+        ],
+        "funding_rate": [0.0001, -0.00005, 0.00008],
+        "symbol": ["BTCUSDT"] * 3,
+    })
+
+    report = audit_market_dataset(candles(), "1h", funding)
+
+    assert report["status"] == "pass"
+    assert report["funding_rows"] == 3
+    assert report["errors"] == []
