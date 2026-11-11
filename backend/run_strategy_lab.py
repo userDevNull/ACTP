@@ -10,6 +10,7 @@ import pandas as pd
 from app.backtesting.futures_simulator import FuturesConfig
 from app.backtesting.strategy_lab import run_strategy_lab
 from app.backtesting.report_visualization import write_research_dashboard
+from app.backtesting.research_study import audit_market_dataset, build_cross_market_validation
 
 
 def parse_dataset(value: str) -> tuple[str, str, Path, Path | None]:
@@ -58,6 +59,7 @@ def main() -> None:
     benchmark_rows = []
     sensitivity_rows = []
     dataset_summaries = []
+    data_quality_rows = []
 
     for symbol, timeframe, candles_path, funding_path in args.dataset:
         if not candles_path.is_file():
@@ -68,6 +70,11 @@ def main() -> None:
             if not funding_path.is_file():
                 parser.error(f"Funding file not found: {funding_path}")
             funding = pd.read_csv(funding_path)
+
+        audit = audit_market_dataset(candles, timeframe, funding)
+        data_quality_rows.append({"symbol": symbol, **audit})
+        if audit["status"] == "fail":
+            parser.error(f"Dataset {symbol} {timeframe} failed preflight: {'; '.join(audit['errors'])}")
 
         report = run_strategy_lab(
             candles, funding, timeframe, config,
@@ -91,6 +98,8 @@ def main() -> None:
             "splits": report["splits"],
             "strategies": report["strategies"],
             "cost_scenarios": report["cost_scenarios"],
+            "data_quality_status": audit["status"],
+            "data_quality_warnings": audit["warnings"],
         })
         print(
             f"Completed {symbol} {timeframe}: "
@@ -106,6 +115,8 @@ def main() -> None:
     sensitivity_csv_path = args.output_dir / "strategy_lab_sensitivity.csv"
     json_path = args.output_dir / "strategy_lab_report.json"
     html_path = args.output_dir / "strategy_lab_dashboard.html"
+    study_csv_path = args.output_dir / "cross_market_validation.csv"
+    quality_csv_path = args.output_dir / "dataset_quality_audit.csv"
 
     results = pd.DataFrame(all_rows)
     if not results.empty:
@@ -118,6 +129,9 @@ def main() -> None:
     pd.DataFrame(monte_carlo_rows).to_csv(monte_carlo_csv_path, index=False)
     pd.DataFrame(benchmark_rows).to_csv(benchmark_csv_path, index=False)
     pd.DataFrame(sensitivity_rows).to_csv(sensitivity_csv_path, index=False)
+    cross_market_rows = build_cross_market_validation(all_rows, benchmark_rows)
+    pd.DataFrame(cross_market_rows).to_csv(study_csv_path, index=False)
+    pd.DataFrame(data_quality_rows).to_csv(quality_csv_path, index=False)
 
     payload = {
         "warning": (
@@ -130,6 +144,8 @@ def main() -> None:
         "monte_carlo": monte_carlo_rows,
         "benchmarks": benchmark_rows,
         "sensitivity": sensitivity_rows,
+        "cross_market_validation": cross_market_rows,
+        "dataset_quality": data_quality_rows,
         "monte_carlo_settings": {
             "simulations_per_experiment": args.monte_carlo_simulations,
             "seed": args.seed,
@@ -142,6 +158,8 @@ def main() -> None:
     print(f"Monte Carlo robustness CSV: {monte_carlo_csv_path}")
     print(f"Benchmark comparison CSV: {benchmark_csv_path}")
     print(f"Sensitivity analysis CSV: {sensitivity_csv_path}")
+    print(f"Cross-market validation CSV: {study_csv_path}")
+    print(f"Dataset quality audit CSV: {quality_csv_path}")
     print(f"JSON report: {json_path}")
     print(f"Offline HTML dashboard: {html_path}")
 
