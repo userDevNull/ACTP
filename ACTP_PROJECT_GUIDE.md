@@ -1,7 +1,7 @@
 # ACTP — Project, Features and Setup Guide
 
 **Repository:** https://github.com/userDevNull/ACTP  
-**Current development:** Phase 8 — Offline Market Intelligence (initial diagnostics)  
+**Current development:** Phase 8 — Offline Market Intelligence (diagnostics, regime transitions and persistence)  
 **Backend:** Python 3.12, FastAPI, pandas, NumPy  
 **Frontend:** React, Vite, Tailwind CSS  
 **Exchange data:** Binance Spot (existing dashboard) and public Binance USDⓈ-M Futures endpoints (research data)
@@ -389,9 +389,13 @@ python run_market_intelligence.py --candles data/BTCUSDT_1h_futures_klines.csv -
 
 Outputs:
 - reports/phase8/market_diagnostics.csv — one row per candle
-- reports/phase8/market_summary.json — latest state and observed regime counts
+- reports/phase8/market_summary.json — latest state, regime counts, transition probabilities and persistence summary
+- reports/phase8/regime_transition_matrix.csv — counts of transitions from each regime to the next
+- reports/phase8/regime_persistence.csv — episode counts and average, median and maximum duration in candles
 
-This tool works without internet once Python dependencies and historical CSVs are present. It is diagnostic research, not a BUY/SELL signal or live execution. The existing dashboard still needs internet for live prices. Later Phase 8 work may add multi-timeframe agreement, richer market structure and regime transition analysis; those are **not** implemented yet.
+This tool works without internet once Python dependencies and historical CSVs are present. It is diagnostic research, not a BUY/SELL signal or live execution. The existing dashboard still needs internet for live prices.
+
+**Interpretation caution:** transition probabilities and duration statistics are retrospective summaries of the entire supplied sample. They are not causal live features and must not be used as if known at the beginning of that sample. Duration is measured in candles; convert to clock time using the dataset timeframe.
 
 ### Dependency and file maintenance
 
