@@ -343,37 +343,98 @@ def _evaluate_segment(
     return result, curve
 
 
+def _spot_buy_and_hold_segment(
+    frame: pd.DataFrame,
+    start: int,
+    end: int,
+    config: FuturesConfig,
+) -> tuple[list[dict], list[dict]]:
+    """Model a fully funded spot buy-and-hold position with entry/exit costs."""
+    if end - start < 2:
+        raise ValueError("Benchmark segment requires at least two candles")
+    entry_index = start + 1
+    entry_bar = frame.iloc[entry_index]
+    exit_bar = frame.iloc[end - 1]
+    entry_fill = float(entry_bar["open"]) * (1.0 + config.slippage_rate)
+    exit_fill = float(exit_bar["close"]) * (1.0 - config.slippage_rate)
+    entry_fee_rate = config.taker_fee_rate
+    quantity = config.initial_equity / (entry_fill * (1.0 + entry_fee_rate))
+    entry_fee = quantity * entry_fill * entry_fee_rate
+    cash = config.initial_equity - quantity * entry_fill - entry_fee
+    exit_fee = quantity * exit_fill * entry_fee_rate
+    final_equity = cash + quantity * exit_fill - exit_fee
+
+    curve = []
+    for index in range(start, end):
+        bar = frame.iloc[index]
+        if index < entry_index:
+            equity = config.initial_equity
+        else:
+            estimated_exit = float(bar["close"]) * (1.0 - config.slippage_rate)
+            equity = cash + quantity * estimated_exit * (1.0 - entry_fee_rate)
+        curve.append({
+            "timestamp": bar["timestamp"].isoformat(),
+            "equity": float(equity),
+        })
+    curve[-1]["equity"] = float(final_equity)
+    trade = {
+        "entry_time": entry_bar["timestamp"].isoformat(),
+        "exit_time": exit_bar["timestamp"].isoformat(),
+        "entry_price": entry_fill,
+        "exit_price": exit_fill,
+        "quantity": quantity,
+        "gross_pnl": (exit_fill - entry_fill) * quantity,
+        "fees": entry_fee + exit_fee,
+        "funding_paid": 0.0,
+        "net_pnl": final_equity - config.initial_equity,
+        "reason": "end_of_data",
+    }
+    return curve, [trade]
+
+
 def _benchmark_comparisons(
     frame: pd.DataFrame,
-    funding: pd.DataFrame | None,
     segments: dict[str, tuple[int, int]],
     scenarios: dict[str, tuple[FuturesConfig, pd.DataFrame | None]],
     timeframe: str,
 ) -> list[dict]:
-    """Compare strategy-independent long buy-and-hold and cash baselines."""
+    """Compare with a fully funded spot hold and an uninvested cash baseline."""
     output = []
-    baselines: dict[str, Strategy] = {
-        "buy_and_hold_long": lambda history, index: 1,
-        "cash_no_trade": lambda history, index: 0,
-    }
     for segment_name, (start, end) in segments.items():
-        for scenario_name, (scenario_config, scenario_funding) in scenarios.items():
-            for benchmark_name, benchmark in baselines.items():
-                result, curve = _evaluate_segment(
-                    frame, scenario_funding, start, end, benchmark, scenario_config
-                )
-                metrics = performance_metrics(
-                    curve, result["trades"], scenario_config.initial_equity,
-                    BARS_PER_YEAR[timeframe],
-                )
-                output.append({
-                    "benchmark": benchmark_name,
-                    "segment": segment_name,
-                    "cost_scenario": scenario_name,
-                    "start_index": start,
-                    "end_index_exclusive": end,
-                    **metrics,
-                })
+        for scenario_name, (scenario_config, _) in scenarios.items():
+            spot_curve, spot_trades = _spot_buy_and_hold_segment(
+                frame, start, end, scenario_config
+            )
+            spot_metrics = performance_metrics(
+                spot_curve, spot_trades, scenario_config.initial_equity,
+                BARS_PER_YEAR[timeframe],
+            )
+            output.append({
+                "benchmark": "buy_and_hold_spot",
+                "segment": segment_name,
+                "cost_scenario": scenario_name,
+                "start_index": start,
+                "end_index_exclusive": end,
+                **spot_metrics,
+            })
+
+            cash_curve = [
+                {"timestamp": frame.iloc[index]["timestamp"].isoformat(),
+                 "equity": scenario_config.initial_equity}
+                for index in range(start, end)
+            ]
+            cash_metrics = performance_metrics(
+                cash_curve, [], scenario_config.initial_equity,
+                BARS_PER_YEAR[timeframe],
+            )
+            output.append({
+                "benchmark": "cash_no_trade",
+                "segment": segment_name,
+                "cost_scenario": scenario_name,
+                "start_index": start,
+                "end_index_exclusive": end,
+                **cash_metrics,
+            })
     return output
 
 
@@ -473,7 +534,7 @@ def run_strategy_lab(
     monte_carlo_rows = []
     regime_labels = _regime_labels(indicator_frame)
     benchmark_rows = _benchmark_comparisons(
-        frame, funding, segments, scenarios, timeframe
+        frame, segments, scenarios, timeframe
     )
     sensitivity_rows = _sensitivity_analysis(
         frame, funding, train_end, validation_end, strategies, base, timeframe
