@@ -54,6 +54,8 @@ def main() -> None:
     all_rows = []
     regime_rows = []
     monte_carlo_rows = []
+    benchmark_rows = []
+    sensitivity_rows = []
     dataset_summaries = []
 
     for symbol, timeframe, candles_path, funding_path in args.dataset:
@@ -77,6 +79,10 @@ def main() -> None:
             regime_rows.append({"symbol": symbol, **row})
         for row in report["monte_carlo"]:
             monte_carlo_rows.append({"symbol": symbol, **row})
+        for row in report["benchmarks"]:
+            benchmark_rows.append({"symbol": symbol, **row})
+        for row in report["sensitivity"]:
+            sensitivity_rows.append({"symbol": symbol, **row})
         dataset_summaries.append({
             "symbol": symbol,
             "timeframe": timeframe,
@@ -95,6 +101,8 @@ def main() -> None:
     csv_path = args.output_dir / "strategy_lab_results.csv"
     regime_csv_path = args.output_dir / "strategy_lab_regime_attribution.csv"
     monte_carlo_csv_path = args.output_dir / "strategy_lab_monte_carlo.csv"
+    benchmark_csv_path = args.output_dir / "strategy_lab_benchmarks.csv"
+    sensitivity_csv_path = args.output_dir / "strategy_lab_sensitivity.csv"
     json_path = args.output_dir / "strategy_lab_report.json"
 
     results = pd.DataFrame(all_rows)
@@ -106,6 +114,8 @@ def main() -> None:
     results.to_csv(csv_path, index=False)
     pd.DataFrame(regime_rows).to_csv(regime_csv_path, index=False)
     pd.DataFrame(monte_carlo_rows).to_csv(monte_carlo_csv_path, index=False)
+    pd.DataFrame(benchmark_rows).to_csv(benchmark_csv_path, index=False)
+    pd.DataFrame(sensitivity_rows).to_csv(sensitivity_csv_path, index=False)
 
     payload = {
         "warning": (
@@ -116,6 +126,8 @@ def main() -> None:
         "results": all_rows,
         "regime_attribution": regime_rows,
         "monte_carlo": monte_carlo_rows,
+        "benchmarks": benchmark_rows,
+        "sensitivity": sensitivity_rows,
         "monte_carlo_settings": {
             "simulations_per_experiment": args.monte_carlo_simulations,
             "seed": args.seed,
@@ -125,6 +137,8 @@ def main() -> None:
     print(f"CSV report: {csv_path}")
     print(f"Regime attribution CSV: {regime_csv_path}")
     print(f"Monte Carlo robustness CSV: {monte_carlo_csv_path}")
+    print(f"Benchmark comparison CSV: {benchmark_csv_path}")
+    print(f"Sensitivity analysis CSV: {sensitivity_csv_path}")
     print(f"JSON report: {json_path}")
 
 
