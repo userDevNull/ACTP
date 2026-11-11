@@ -1,9 +1,4 @@
-"""Run the Phase 7 strategy performance laboratory on local Futures CSV data.
-
-Example:
-  python run_strategy_lab.py --dataset BTCUSDT,1h,data/BTCUSDT_1h_futures_klines.csv,data/BTCUSDT_futures_funding.csv
-  python run_strategy_lab.py --dataset ETHUSDT,4h,data/ETHUSDT_4h_futures_klines.csv,data/ETHUSDT_futures_funding.csv
-"""
+"""Run the Phase 7 strategy performance laboratory on local Futures CSV data."""
 from __future__ import annotations
 
 import argparse
@@ -53,6 +48,7 @@ def main() -> None:
         maintenance_margin_rate=args.maintenance_margin,
     )
     all_rows = []
+    regime_rows = []
     dataset_summaries = []
 
     for symbol, timeframe, candles_path, funding_path in args.dataset:
@@ -67,8 +63,9 @@ def main() -> None:
 
         report = run_strategy_lab(candles, funding, timeframe, config)
         for row in report["results"]:
-            row["symbol"] = symbol
-            all_rows.append(row)
+            all_rows.append({"symbol": symbol, **row})
+        for row in report["regime_attribution"]:
+            regime_rows.append({"symbol": symbol, **row})
         dataset_summaries.append({
             "symbol": symbol,
             "timeframe": timeframe,
@@ -77,12 +74,17 @@ def main() -> None:
             "strategies": report["strategies"],
             "cost_scenarios": report["cost_scenarios"],
         })
-        print(f"Completed {symbol} {timeframe}: {len(report['results'])} experiments")
+        print(
+            f"Completed {symbol} {timeframe}: "
+            f"{len(report['results'])} experiments, "
+            f"{len(report['regime_attribution'])} regime groups"
+        )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = args.output_dir / "strategy_lab_results.csv"
     regime_csv_path = args.output_dir / "strategy_lab_regime_attribution.csv"
     json_path = args.output_dir / "strategy_lab_report.json"
+
     results = pd.DataFrame(all_rows)
     if not results.empty:
         results = results.sort_values(
@@ -90,6 +92,8 @@ def main() -> None:
             ascending=[True, True, True, True, False],
         )
     results.to_csv(csv_path, index=False)
+    pd.DataFrame(regime_rows).to_csv(regime_csv_path, index=False)
+
     payload = {
         "warning": (
             "Research only; not a profitability guarantee or live-trading recommendation. "
@@ -97,9 +101,11 @@ def main() -> None:
         ),
         "datasets": dataset_summaries,
         "results": all_rows,
+        "regime_attribution": regime_rows,
     }
     json_path.write_text(json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8")
     print(f"CSV report: {csv_path}")
+    print(f"Regime attribution CSV: {regime_csv_path}")
     print(f"JSON report: {json_path}")
 
 
