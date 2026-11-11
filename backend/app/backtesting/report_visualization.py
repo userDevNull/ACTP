@@ -206,7 +206,7 @@ def build_research_dashboard(report: dict) -> str:
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     warning = escape(str(report.get("warning", "Research only; not a live-trading recommendation.")))
     dataset_text = ", ".join(
-        f"{escape(str(item.get('symbol','')))} {escape(str(item.get('timeframe','')))} ({item.get('candles','?')} candles)"
+        f"{escape(str(item.get('symbol','')))} {escape(str(item.get('timeframe','')))} ({escape(str(item.get('candles','?')))} candles)"
         for item in datasets
     ) or "Dataset metadata not supplied"
 
