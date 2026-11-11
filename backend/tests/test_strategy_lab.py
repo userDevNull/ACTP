@@ -4,6 +4,8 @@ import pytest
 
 from app.backtesting.strategy_lab import (
     BARS_PER_YEAR,
+    _regime_attribution,
+    _regime_labels,
     performance_metrics,
     run_strategy_lab,
     strategy_catalog,
@@ -62,6 +64,11 @@ def test_lab_runs_all_strategies_across_three_splits_and_cost_scenarios():
         "base_cost", "2x_cost_stress"
     }
     assert all("sharpe_ratio_annualized" in row for row in report["results"])
+    assert "regime_attribution" in report
+    assert all(row["regime"] in {
+        "TREND_UP", "TREND_DOWN", "RANGE", "BREAKOUT_UP",
+        "BREAKOUT_DOWN", "UNCERTAIN"
+    } for row in report["regime_attribution"])
 
 
 def test_lab_rejects_unknown_timeframe_and_missing_volume():
@@ -70,3 +77,21 @@ def test_lab_rejects_unknown_timeframe_and_missing_volume():
         run_strategy_lab(candles, timeframe="17m")
     with pytest.raises(ValueError, match="Candles require"):
         run_strategy_lab(candles.drop(columns=["volume"]), timeframe="1h")
+
+
+
+def test_regime_attribution_uses_signal_candle_before_entry():
+    candles = sample_candles()
+    labels = _regime_labels(candles)
+    entry_timestamp = candles.iloc[100]["timestamp"].isoformat()
+    trade = {
+        "entry_time": entry_timestamp,
+        "net_pnl": 3.0,
+        "fees": 0.2,
+        "funding_paid": 0.1,
+    }
+    attribution = _regime_attribution([trade], candles, labels)
+    assert len(attribution) == 1
+    assert attribution[0]["regime"] == labels[99]
+    assert attribution[0]["trades"] == 1
+    assert attribution[0]["expectancy"] == 3.0
