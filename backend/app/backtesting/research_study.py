@@ -132,8 +132,15 @@ def build_cross_market_validation(
         for row in benchmarks
     }
     grouped: dict[str, list[dict]] = {}
+    rank_lookup: dict[tuple[str, str, str], int] = {}
+    datasets: dict[tuple[str, str], list[dict]] = {}
     for row in test_rows:
         grouped.setdefault(str(row["strategy"]), []).append(row)
+        datasets.setdefault((str(row.get("symbol")), str(row.get("timeframe"))), []).append(row)
+    for (symbol, timeframe), dataset_rows in datasets.items():
+        ordered = sorted(dataset_rows, key=lambda item: float(item["net_return_pct"]), reverse=True)
+        for rank, item in enumerate(ordered, start=1):
+            rank_lookup[(symbol, timeframe, str(item["strategy"]))] = rank
 
     output = []
     for strategy, rows in sorted(grouped.items()):
@@ -161,12 +168,8 @@ def build_cross_market_validation(
                 excess.append(edge)
                 beat_spot += int(edge > 0)
 
-        by_dataset: dict[tuple[str, str], list[dict]] = {}
         for row in rows:
-            by_dataset.setdefault((str(row.get("symbol")), str(row.get("timeframe"))), []).append(row)
-        for dataset_rows in by_dataset.values():
-            ordered = sorted(dataset_rows, key=lambda item: float(item["net_return_pct"]), reverse=True)
-            ranks.extend(i + 1 for i, item in enumerate(ordered) if item["strategy"] == strategy)
+            ranks.append(rank_lookup[(str(row.get("symbol")), str(row.get("timeframe")), strategy)])
 
         n = len(rows)
         output.append({
